@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>FinTrack — Cash Flow</title>
+    <title>FinTrack — Net Worth & Allocation</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -71,13 +71,10 @@
         .tab-btn {
             padding: 0 22px;
             height: 49px;
-            background: none;
-            border: none;
+            background: none; border: none;
             color: var(--muted);
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            position: relative;
+            font-size: 0.875rem; font-weight: 500;
+            cursor: pointer; position: relative;
             text-decoration: none;
             display: inline-flex;
             align-items: center;
@@ -99,17 +96,326 @@
             background: var(--surface-2);
             border: 1px solid var(--border);
             color: var(--text);
-            padding: 6px 10px;
-            border-radius: 8px;
-            font-size: 0.875rem;
-            cursor: pointer;
-            outline: none;
+            padding: 6px 10px; border-radius: 8px;
+            font-size: 0.875rem; cursor: pointer; outline: none;
             transition: border-color 0.2s;
         }
         .year-select:focus { border-color: var(--accent); }
 
         /* ── Main ───────────────────────────────────────────── */
         main { padding: 28px 32px; max-width: 1600px; margin: 0 auto; }
+
+        /* ── Summary Cards ──────────────────────────────────── */
+        .nw-summary {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+        .sum-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 22px;
+            transition: border-color 0.2s;
+        }
+        .sum-card:hover { border-color: var(--accent); }
+        .sum-label {
+            font-size: 0.72rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--muted); margin-bottom: 8px;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .sum-value { font-size: 1.45rem; font-weight: 700; letter-spacing: -0.5px; }
+        .sum-sub   { font-size: 0.78rem; color: var(--muted); margin-top: 5px; }
+
+        .badge { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; }
+        .badge.up { background: rgba(74,222,128,0.12); color: var(--green); }
+        .badge.dn { background: rgba(248,113,113,0.12); color: var(--red); }
+        .badge.fl { background: rgba(136,146,164,0.12); color: var(--muted); }
+
+        /* ── Two-column layout ──────────────────────────────── */
+        .nw-layout {
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 20px;
+            align-items: start;
+        }
+        @media (max-width: 1100px) { .nw-layout { grid-template-columns: 1fr; } }
+
+        /* ── Table section ──────────────────────────────────── */
+        .table-section {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+        .ts-head {
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .ts-title  { font-size: 0.9rem; font-weight: 600; }
+        .ts-meta   { font-size: 0.78rem; color: var(--muted); }
+
+        .table-scroll { overflow-x: auto; }
+
+        table { width: 100%; border-collapse: collapse; min-width: 860px; }
+
+        thead th {
+            padding: 8px;
+            font-size: 0.7rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--muted);
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+            text-align: right;
+            background: var(--surface);
+        }
+
+        /* Sticky first column */
+        th.s-cat, td.s-cat {
+            text-align: left !important;
+            position: sticky; left: 0;
+            background: var(--surface);
+            z-index: 2;
+            min-width: 168px;
+            padding-left: 18px;
+        }
+
+        tbody td {
+            padding: 3px 6px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.84rem;
+            vertical-align: middle;
+        }
+        td.num { text-align: right; }
+
+        /* ── Group header rows ──────────────────────────────── */
+        tr.grp-head td {
+            background: var(--surface-2);
+            padding: 9px 18px;
+            border-top: 2px solid var(--border);
+            border-bottom: none;
+        }
+        tr.grp-head td.s-cat { background: var(--surface-2); padding-left: 18px; }
+        .grp-head-inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .grp-name {
+            font-size: 0.75rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--muted);
+            display: flex; align-items: center; gap: 8px;
+        }
+        .grp-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        /* ── Item rows ──────────────────────────────────────── */
+        tr.item-row:hover td             { background: rgba(255,255,255,0.03); }
+        tr.item-row:hover td.s-cat       { background: rgba(255,255,255,0.03); }
+
+        /* ── Group subtotal rows ────────────────────────────── */
+        tr.sub-total td {
+            background: rgba(255,255,255,0.02);
+            font-weight: 700;
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            font-size: 0.82rem;
+            text-align: right;
+            padding: 8px 8px;
+        }
+        tr.sub-total td.s-cat {
+            background: rgba(255,255,255,0.02);
+            font-size: 0.76rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding-left: 18px;
+        }
+
+        /* ── Grand total row ────────────────────────────────── */
+        tr.grand-total td {
+            font-weight: 800;
+            font-size: 0.88rem;
+            background: var(--surface-2);
+            border-top: 2px solid var(--accent);
+            border-bottom: none;
+            text-align: right;
+            padding: 10px 8px;
+        }
+        tr.grand-total td.s-cat {
+            background: var(--surface-2);
+            color: var(--accent);
+            letter-spacing: 0.04em;
+            font-size: 0.88rem;
+            padding-left: 18px;
+        }
+        tr.grand-total td.s-cat,
+        tr.sub-total   td.s-cat { background: inherit; }
+
+        /* ── Cell inputs ────────────────────────────────────── */
+        .cell-input {
+            width: 100%; min-width: 68px;
+            background: transparent;
+            border: none; outline: none;
+            color: var(--text);
+            font-size: 0.84rem;
+            font-family: inherit;
+            text-align: right;
+            padding: 7px 8px;
+            border-radius: 5px;
+            transition: background 0.12s;
+            -moz-appearance: textfield;
+        }
+        .cell-input::-webkit-inner-spin-button,
+        .cell-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+        .cell-input:hover  { background: rgba(255,255,255,0.04); }
+        .cell-input:focus  { background: rgba(108,99,255,0.08); outline: 1px solid rgba(108,99,255,0.4); }
+
+        /* ── Latest column ──────────────────────────────────── */
+        .latest-cell {
+            text-align: right;
+            padding-right: 14px !important;
+            font-size: 0.84rem;
+            color: var(--muted);
+            white-space: nowrap;
+            min-width: 92px;
+        }
+        tr.sub-total   .latest-cell,
+        tr.grand-total .latest-cell { color: var(--text); font-weight: 700; }
+
+        /* ── Delete button ──────────────────────────────────── */
+        td.del-col { width: 28px; padding: 0 4px; text-align: center; }
+        .btn-del {
+            background: none; border: none;
+            color: transparent;
+            cursor: pointer; font-size: 0.75rem;
+            padding: 4px; border-radius: 4px;
+            transition: color 0.15s; line-height: 1;
+        }
+        tr.item-row:hover .btn-del { color: var(--muted); }
+        .btn-del:hover              { color: var(--red) !important; }
+
+        /* ── Add button ─────────────────────────────────────── */
+        .btn-add {
+            padding: 4px 11px;
+            background: rgba(108,99,255,0.1);
+            border: 1px solid rgba(108,99,255,0.2);
+            color: var(--accent);
+            border-radius: 6px;
+            font-size: 0.75rem; font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-add:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+        /* ── Right panel (sticky) ───────────────────────────── */
+        .nw-right {
+            position: sticky;
+            top: 141px; /* 64px header + 49px nav + 28px main padding */
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .chart-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 20px;
+            height: 500px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        .chart-panel canvas {
+            flex-grow: 1;
+            min-height: 0;
+            display: block;
+        }
+        .cp-head {
+            display: flex; align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+        }
+        .cp-title { font-size: 0.875rem; font-weight: 600; }
+        .cp-sub   { font-size: 0.78rem; color: var(--muted); }
+
+        /* ── Legend pills (line chart) ──────────────────────── */
+        .legend-pills {
+            display: flex; flex-wrap: wrap;
+            gap: 6px; margin-bottom: 12px;
+        }
+        .legend-pill {
+            display: flex; align-items: center; gap: 5px;
+            font-size: 0.72rem; color: var(--muted);
+        }
+        .legend-swatch {
+            width: 10px; height: 3px; border-radius: 2px; flex-shrink: 0;
+        }
+
+        /* ── Modal ──────────────────────────────────────────── */
+        .overlay {
+            display: none;
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.55);
+            backdrop-filter: blur(3px);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+        .overlay.open { display: flex; }
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 26px; width: 420px; max-width: 90vw;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .modal h3 { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+        .modal-sub { font-size: 0.8rem; color: var(--muted); margin-bottom: 18px; }
+        .field { margin-bottom: 14px; }
+        .field label {
+            display: block;
+            font-size: 0.72rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--muted); margin-bottom: 6px;
+        }
+        .field input {
+            width: 100%;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 9px 13px; border-radius: 8px;
+            font-size: 0.875rem; font-family: inherit;
+            outline: none; transition: border-color 0.2s;
+        }
+        .field input:focus { border-color: var(--accent); }
+        .modal-btns {
+            display: flex; justify-content: flex-end;
+            gap: 10px; margin-top: 20px;
+        }
+        .btn-cancel {
+            padding: 8px 16px; background: none;
+            border: 1px solid var(--border); color: var(--muted);
+            border-radius: 8px; font-size: 0.875rem; cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-cancel:hover { border-color: var(--text); color: var(--text); }
+        .btn-ok {
+            padding: 8px 18px; background: var(--accent);
+            border: none; color: #fff; border-radius: 8px;
+            font-size: 0.875rem; font-weight: 600; cursor: pointer;
+            transition: opacity 0.15s;
+        }
+        .btn-ok:hover { opacity: 0.85; }
     </style>
 </head>
 <body>
@@ -123,12 +429,670 @@
 <!-- ── Nav ─────────────────────────────────────────────────────── -->
 <nav>
     <div class="nav-tabs">
-        <a class="tab-btn" href="dashboard.html">📊 Dashboard</a>
-        <a class="tab-btn" href="cashflow.html">💸 Cash Flow</a>
-        <a class="tab-btn active" href="networth.html">🏦 Net Worth &amp; Allocation</a>
+        <a class="tab-btn" href="/">📊 Dashboard</a>
+        <a class="tab-btn" href="/cashflow">💸 Cash Flow</a>
+        <a class="tab-btn active" href="/networth">🏦 Net Worth &amp; Allocation</a>
     </div>
     <div class="nav-right">
         <span class="year-label">Year:</span>
         <select class="year-select" id="yearSel"></select>
     </div>
 </nav>
+
+<main>
+
+    <!-- Summary Cards -->
+    <div class="nw-summary">
+
+        <div class="sum-card">
+            <div class="sum-label">
+                <span style="color:var(--accent)">◆</span> Net Worth
+            </div>
+            <div class="sum-value" id="sc-nw">$0</div>
+            <div class="sum-sub">
+                <span class="badge fl" id="sc-mom">—</span>&nbsp; vs prev month
+            </div>
+        </div>
+
+        <div class="sum-card">
+            <div class="sum-label">
+                <span class="grp-dot" style="background:var(--blue)"></span> Savings &amp; Cash
+            </div>
+            <div class="sum-value" id="sc-sav" style="color:var(--blue)">$0</div>
+            <div class="sum-sub" id="sc-sav-sub">—% of total</div>
+        </div>
+
+        <div class="sum-card">
+            <div class="sum-label">
+                <span class="grp-dot" style="background:var(--green)"></span> Investments
+            </div>
+            <div class="sum-value" id="sc-inv" style="color:var(--green)">$0</div>
+            <div class="sum-sub" id="sc-inv-sub">—% of total</div>
+        </div>
+
+        <div class="sum-card">
+            <div class="sum-label">
+                <span class="grp-dot" style="background:var(--amber)"></span> Assets
+            </div>
+            <div class="sum-value" id="sc-ast" style="color:var(--amber)">$0</div>
+            <div class="sum-sub" id="sc-ast-sub">—% of total</div>
+        </div>
+
+    </div>
+
+    <div class="nw-layout">
+
+        <!-- LEFT: Table -->
+        <div class="nw-left">
+            <div class="table-section">
+                <div class="ts-head">
+                    <span class="ts-title">🏦 &nbsp;Net Worth &amp; Allocation Tracker</span>
+                    <span class="ts-meta" id="tsMeta">Enter beginning-of-month balances</span>
+                </div>
+                <div class="table-scroll" id="tableWrap"></div>
+            </div>
+        </div>
+
+        <!-- RIGHT: Charts -->
+        <div class="nw-right">
+
+            <div class="chart-panel">
+                <div class="cp-head">
+                    <span class="cp-title">Net Worth Trend</span>
+                    <span class="cp-sub" id="lineSub"></span>
+                </div>
+                <canvas id="lineChart" height="215"></canvas>
+            </div>
+
+            <div class="chart-panel">
+                <div class="cp-head">
+                    <span class="cp-title">Allocation</span>
+                    <span class="cp-sub" id="pieSub">—</span>
+                </div>
+                <canvas id="pieChart" height="215"></canvas>
+            </div>
+
+        </div>
+    </div>
+</main>
+
+<!-- ── Add Account Modal ────────────────────────────────────────── -->
+<div class="overlay" id="overlay">
+    <div class="modal">
+        <h3 id="modalTitle">Add Account</h3>
+        <p class="modal-sub" id="modalSub"></p>
+        <div class="field">
+            <label>Account / Asset Name</label>
+            <input type="text" id="mName"
+                   placeholder="e.g. Capital One HYSA, AAPL Equity, Home Value…"/>
+        </div>
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+            <button class="btn-ok"     onclick="confirmAdd()">Add</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ════════════════════════════════════════════════════════════════
+    //  CONSTANTS & GROUP CONFIG
+    // ════════════════════════════════════════════════════════════════
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const SK     = 'ft_networth';
+
+    // Fixed top-level groups — users add subcategories (accounts), not groups
+    const GROUPS = [
+        { id: 'savings',     label: 'Savings / Cash', color: '#60a5fa', icon: '🏦', scId: 'sc-sav' },
+        { id: 'investments', label: 'Investments',     color: '#4ade80', icon: '📈', scId: 'sc-inv' },
+        { id: 'assets',      label: 'Assets',          color: '#f59e0b', icon: '🏠', scId: 'sc-ast' },
+    ];
+
+    // ════════════════════════════════════════════════════════════════
+    //  HELPERS
+    // ════════════════════════════════════════════════════════════════
+    const uid  = () => Math.random().toString(36).slice(2, 9);
+    const esc  = s  => String(s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const fmtN = n  => {
+        if (n == null || isNaN(n)) return '$0';
+        return (n < 0 ? '−$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US');
+    };
+    const getY = () => parseInt(document.getElementById('yearSel').value);
+
+    // ════════════════════════════════════════════════════════════════
+    //  STATE
+    //  {
+    //    accounts: {
+    //      savings:     [{ id, name }, …],
+    //      investments: [{ id, name }, …],
+    //      assets:      [{ id, name }, …],
+    //    },
+    //    values: {
+    //      "2026": { "<itemId>": { 0: 5000, 1: 5250, … }, … }
+    //    }
+    //  }
+    //
+    //  accounts are shared across all years — only values are per-year.
+    //  Deleting an account removes it from all years.
+    // ════════════════════════════════════════════════════════════════
+    let STATE = {};
+
+    function loadState() {
+        try {
+            const raw = localStorage.getItem(SK);
+            STATE = raw ? JSON.parse(raw) : defaultState();
+            if (!STATE.accounts) STATE.accounts = defaultAccounts();
+            if (!STATE.values)   STATE.values   = {};
+        } catch { STATE = defaultState(); }
+    }
+
+    function defaultState() {
+        return { accounts: defaultAccounts(), values: {} };
+    }
+
+    function defaultAccounts() {
+        return {
+            savings: [
+                { id: uid(), name: 'CPB Checkings'    },
+                { id: uid(), name: 'Capital One HYSA' },
+            ],
+            investments: [
+                { id: uid(), name: 'Schwab Brokerage' },
+                { id: uid(), name: 'Roth IRA'         },
+                { id: uid(), name: 'VOO ETF'          },
+            ],
+            assets: [
+                { id: uid(), name: 'Home Value' },
+                { id: uid(), name: 'Vehicle'    },
+            ],
+        };
+    }
+
+    function persist() {
+        localStorage.setItem(SK, JSON.stringify(STATE));
+        // API stub — uncomment when FastAPI is ready:
+        // fetch('/api/networth', {
+        //   method: 'POST',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify(STATE)
+        // });
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  DATA ACCESS
+    // ════════════════════════════════════════════════════════════════
+    function getVal(itemId, year, mi) {
+        const v = STATE.values[year]?.[itemId]?.[mi];
+        return v !== undefined ? parseFloat(v) : undefined;
+    }
+
+    function setVal(itemId, year, mi, rawVal) {
+        if (!STATE.values[year])           STATE.values[year]           = {};
+        if (!STATE.values[year][itemId])   STATE.values[year][itemId]   = {};
+        const v = parseFloat(rawVal);
+        if (isNaN(v) || String(rawVal).trim() === '') {
+            delete STATE.values[year][itemId][mi];
+            if (!Object.keys(STATE.values[year][itemId]).length)
+                delete STATE.values[year][itemId];
+        } else {
+            STATE.values[year][itemId][mi] = v;
+        }
+    }
+
+    function groupTotal(gid, year, mi) {
+        return (STATE.accounts[gid] || [])
+            .reduce((s, item) => s + (getVal(item.id, year, mi) ?? 0), 0);
+    }
+
+    function netWorth(year, mi) {
+        return GROUPS.reduce((s, g) => s + groupTotal(g.id, year, mi), 0);
+    }
+
+    // Find the latest month index (0–11) with any entered value; null if none.
+    function latestFilledMonth(year) {
+        for (let mi = 11; mi >= 0; mi--) {
+            for (const g of GROUPS) {
+                for (const item of (STATE.accounts[g.id] || [])) {
+                    if (getVal(item.id, year, mi) !== undefined) return mi;
+                }
+            }
+        }
+        return null;
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  CELL HANDLERS
+    //  oninput → fast targeted DOM refresh (no localStorage write)
+    //  onblur  → persist to localStorage (fires once on leaving cell)
+    // ════════════════════════════════════════════════════════════════
+    function onInput(itemId, year, mi, rawVal) {
+        setVal(itemId, year, mi, rawVal);
+
+        // Find parent group
+        const gid = GROUPS.find(g =>
+            (STATE.accounts[g.id] || []).some(i => i.id === itemId))?.id;
+
+        // Update this month's group subtotal + net worth total
+        if (gid) {
+            const subEl = document.getElementById(`sub-${gid}-${mi}`);
+            if (subEl) subEl.textContent = fmtN(groupTotal(gid, year, mi));
+        }
+        const nwEl = document.getElementById(`nw-${mi}`);
+        if (nwEl) nwEl.textContent = fmtN(netWorth(year, mi));
+
+        // Refresh "Latest" column, summary cards, charts
+        refreshLatestColumn(year);
+        refreshSummary(year);
+        refreshCharts(year);
+    }
+
+    function onBlur() { persist(); }
+
+    // ════════════════════════════════════════════════════════════════
+    //  TARGETED "LATEST" COLUMN REFRESH
+    //  Uses data-* attributes so no re-render needed.
+    // ════════════════════════════════════════════════════════════════
+    function refreshLatestColumn(year) {
+        const lfm = latestFilledMonth(year);
+
+        // Item cells
+        document.querySelectorAll('[data-lat-item]').forEach(el => {
+            const v = lfm !== null ? getVal(el.dataset.latItem, year, lfm) : undefined;
+            el.textContent = v !== undefined ? fmtN(v) : '—';
+        });
+
+        // Group subtotal cells
+        document.querySelectorAll('[data-lat-group]').forEach(el => {
+            el.textContent = lfm !== null
+                ? fmtN(groupTotal(el.dataset.latGroup, year, lfm)) : '—';
+        });
+
+        // Net worth cell
+        const nwLatEl = document.querySelector('[data-lat-nw]');
+        if (nwLatEl) nwLatEl.textContent = lfm !== null ? fmtN(netWorth(year, lfm)) : '—';
+
+        // Column header label
+        const hEl = document.getElementById('latest-header');
+        if (hEl) hEl.textContent = lfm !== null ? MONTHS[lfm] : '—';
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  SUMMARY CARDS
+    // ════════════════════════════════════════════════════════════════
+    function refreshSummary(year) {
+        const lfm   = latestFilledMonth(year);
+        const nw    = lfm !== null ? netWorth(year, lfm)    : 0;
+        const prevM = lfm !== null && lfm > 0 ? lfm - 1     : null;
+        const nwPrev = prevM !== null ? netWorth(year, prevM) : null;
+        const mom    = nwPrev !== null ? nw - nwPrev : null;
+
+        // Net worth + MoM badge
+        document.getElementById('sc-nw').textContent = fmtN(nw);
+        const momEl = document.getElementById('sc-mom');
+        if (mom === null) {
+            momEl.className   = 'badge fl';
+            momEl.textContent = '—';
+        } else {
+            momEl.className   = `badge ${mom >= 0 ? 'up' : 'dn'}`;
+            momEl.textContent = (mom >= 0 ? '▲ ' : '▼ ') + fmtN(Math.abs(mom));
+        }
+
+        // Per-group cards
+        GROUPS.forEach(g => {
+            const val = lfm !== null ? groupTotal(g.id, year, lfm) : 0;
+            const pct = nw > 0 ? ((val / nw) * 100).toFixed(1) + '% of total' : '—';
+            const valEl = document.getElementById(g.scId);
+            const subEl = document.getElementById(g.scId + '-sub');
+            if (valEl) valEl.textContent = fmtN(val);
+            if (subEl) subEl.textContent = pct;
+        });
+
+        // Table header meta
+        const metaEl = document.getElementById('tsMeta');
+        if (metaEl) metaEl.textContent = lfm !== null
+            ? `Latest data: ${MONTHS[lfm]} ${year}`
+            : 'Enter beginning-of-month balances';
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  CHARTS
+    // ════════════════════════════════════════════════════════════════
+    let lineC = null, pieC = null;
+
+    Chart.defaults.color       = '#8892a4';
+    Chart.defaults.font.family = "'Inter', -apple-system, sans-serif";
+    Chart.defaults.font.size   = 11;
+
+    function initCharts() {
+        // ── Line chart ───────────────────────────────────────────
+        const lineCtx  = document.getElementById('lineChart');
+        const nwGrad   = lineCtx.getContext('2d').createLinearGradient(0, 0, 0, 215);
+        nwGrad.addColorStop(0,   'rgba(108,99,255,0.2)');
+        nwGrad.addColorStop(1,   'rgba(108,99,255,0.0)');
+
+        lineC = new Chart(lineCtx, {
+            type: 'line',
+            data: {
+                labels: MONTHS,
+                datasets: [
+                    {
+                        label: 'Net Worth',
+                        data: Array(12).fill(null),
+                        borderColor: '#6c63ff',
+                        backgroundColor: nwGrad,
+                        borderWidth: 2.5,
+                        tension: 0.4,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#6c63ff',
+                        pointBorderColor: '#1a1d27',
+                        pointBorderWidth: 2,
+                        fill: true,
+                        spanGaps: false,
+                    },
+                    {
+                        label: 'Savings / Cash',
+                        data: Array(12).fill(null),
+                        borderColor: '#60a5fa',
+                        backgroundColor: 'transparent',
+                        borderWidth: 1.5,
+                        tension: 0.4,
+                        pointRadius: 2,
+                        borderDash: [4, 3],
+                        spanGaps: false,
+                    },
+                    {
+                        label: 'Investments',
+                        data: Array(12).fill(null),
+                        borderColor: '#4ade80',
+                        backgroundColor: 'transparent',
+                        borderWidth: 1.5,
+                        tension: 0.4,
+                        pointRadius: 2,
+                        borderDash: [4, 3],
+                        spanGaps: false,
+                    },
+                    {
+                        label: 'Assets',
+                        data: Array(12).fill(null),
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'transparent',
+                        borderWidth: 1.5,
+                        tension: 0.4,
+                        pointRadius: 2,
+                        borderDash: [4, 3],
+                        spanGaps: false,
+                    },
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { padding: 10, usePointStyle: true, pointStyleWidth: 8 }
+                    },
+                    tooltip: {
+                        backgroundColor: '#222536',
+                        borderColor: '#2e3249',
+                        borderWidth: 1,
+                        callbacks: { label: ctx => ' ' + fmtN(ctx.parsed.y) }
+                    }
+                },
+                scales: {
+                    x: { grid: { color: '#2e3249' }, border: { display: false } },
+                    y: {
+                        grid: { color: '#2e3249' }, border: { display: false },
+                        ticks: { callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v) }
+                    }
+                }
+            }
+        });
+
+        // ── Pie chart ────────────────────────────────────────────
+        pieC = new Chart(document.getElementById('pieChart'), {
+            type: 'doughnut',
+            data: {
+                labels: GROUPS.map(g => g.label),
+                datasets: [{
+                    data: [1, 1, 1],  // equal placeholder until data entered
+                    backgroundColor: GROUPS.map(g => g.color),
+                    borderColor: '#1a1d27',
+                    borderWidth: 3,
+                    hoverOffset: 6,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '62%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { padding: 12, usePointStyle: true, pointStyleWidth: 8 }
+                    },
+                    tooltip: {
+                        backgroundColor: '#222536',
+                        borderColor: '#2e3249',
+                        borderWidth: 1,
+                        callbacks: {
+                            label: ctx => ' ' + fmtN(ctx.parsed) + '  (' + ctx.label + ')'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function refreshCharts(year) {
+        const toPoint = v => v > 0 ? v : null;
+
+        // Line: one point per month; null keeps gaps for un-entered months
+        lineC.data.datasets[0].data = MONTHS.map((_, mi) => toPoint(netWorth(year, mi)));
+        lineC.data.datasets[1].data = MONTHS.map((_, mi) => toPoint(groupTotal('savings',     year, mi)));
+        lineC.data.datasets[2].data = MONTHS.map((_, mi) => toPoint(groupTotal('investments', year, mi)));
+        lineC.data.datasets[3].data = MONTHS.map((_, mi) => toPoint(groupTotal('assets',      year, mi)));
+        lineC.update();
+
+        // Pie: latest filled month allocation by group
+        const lfm = latestFilledMonth(year);
+        const mi  = lfm ?? 0;
+        pieC.data.datasets[0].data = GROUPS.map(g => groupTotal(g.id, year, mi) || 0);
+        pieC.update();
+
+        document.getElementById('pieSub').textContent  = lfm !== null ? `${MONTHS[lfm]} ${year}` : '—';
+        document.getElementById('lineSub').textContent  = String(year);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  TABLE BUILDER
+    // ════════════════════════════════════════════════════════════════
+    function buildTable(year) {
+        const lfm      = latestFilledMonth(year);
+        const latLabel = lfm !== null ? MONTHS[lfm] : '—';
+        const TOTAL_COLS = 15; // 1 name + 12 months + 1 latest + 1 del
+
+        const mHead = MONTHS.map(m => `<th>${m}</th>`).join('');
+        let   rows  = '';
+
+        for (const g of GROUPS) {
+            const items = STATE.accounts[g.id] || [];
+
+            // ── Group header row ──────────────────────────────────
+            rows += `<tr class="grp-head">
+      <td class="s-cat" colspan="${TOTAL_COLS}">
+        <div class="grp-head-inner">
+          <span class="grp-name">
+            <span class="grp-dot" style="background:${g.color}"></span>
+            ${g.icon}&nbsp;&nbsp;${esc(g.label)}
+          </span>
+          <button class="btn-add" onclick="openModal('${g.id}')">+ Add Account</button>
+        </div>
+      </td>
+    </tr>`;
+
+            // ── Account / subcategory rows ────────────────────────
+            if (items.length === 0) {
+                rows += `<tr class="item-row">
+        <td class="s-cat" style="color:var(--muted); padding-left:32px; font-style:italic"
+            colspan="${TOTAL_COLS}">No accounts yet — click "+ Add Account" above</td>
+      </tr>`;
+            } else {
+                for (const item of items) {
+                    const cells = MONTHS.map((_, mi) => {
+                        const v = getVal(item.id, year, mi);
+                        return `<td class="num"><input type="number" class="cell-input"
+            placeholder="—" value="${v !== undefined ? v : ''}"
+            oninput="onInput('${item.id}',${year},${mi},this.value)"
+            onblur="onBlur()"/></td>`;
+                    }).join('');
+
+                    const latV = lfm !== null ? getVal(item.id, year, lfm) : undefined;
+
+                    rows += `<tr class="item-row">
+          <td class="s-cat" style="padding-left:30px; color:var(--muted)">${esc(item.name)}</td>
+          ${cells}
+          <td class="latest-cell" data-lat-item="${item.id}">
+            ${latV !== undefined ? fmtN(latV) : '—'}
+          </td>
+          <td class="del-col">
+            <button class="btn-del" onclick="delAccount('${g.id}','${item.id}')">✕</button>
+          </td>
+        </tr>`;
+                }
+            }
+
+            // ── Group subtotal row ────────────────────────────────
+            const subCells = MONTHS.map((_, mi) =>
+                `<td class="num" id="sub-${g.id}-${mi}">${fmtN(groupTotal(g.id, year, mi))}</td>`
+            ).join('');
+
+            rows += `<tr class="sub-total">
+      <td class="s-cat" style="color:${g.color}; padding-left:18px">${esc(g.label)} Total</td>
+      ${subCells}
+      <td class="latest-cell" data-lat-group="${g.id}">
+        ${lfm !== null ? fmtN(groupTotal(g.id, year, lfm)) : '—'}
+      </td>
+      <td></td>
+    </tr>`;
+        }
+
+        // ── Grand total (Net Worth) row ───────────────────────────
+        const nwCells = MONTHS.map((_, mi) =>
+            `<td class="num" id="nw-${mi}">${fmtN(netWorth(year, mi))}</td>`
+        ).join('');
+
+        rows += `<tr class="grand-total">
+    <td class="s-cat">NET WORTH</td>
+    ${nwCells}
+    <td class="latest-cell" data-lat-nw style="color:var(--accent)">
+      ${lfm !== null ? fmtN(netWorth(year, lfm)) : '—'}
+    </td>
+    <td></td>
+  </tr>`;
+
+        return `<table>
+    <thead>
+      <tr>
+        <th class="s-cat" style="text-align:left">Account / Asset</th>
+        ${mHead}
+        <th id="latest-header"
+            style="text-align:right; min-width:92px; padding-right:14px">
+          ${latLabel}
+        </th>
+        <th style="width:28px"></th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  DELETE ACCOUNT
+    //  Removes from accounts list + all year values
+    // ════════════════════════════════════════════════════════════════
+    function delAccount(gid, itemId) {
+        STATE.accounts[gid] = (STATE.accounts[gid] || []).filter(i => i.id !== itemId);
+        Object.keys(STATE.values).forEach(y => {
+            if (STATE.values[y]?.[itemId]) delete STATE.values[y][itemId];
+        });
+        persist();
+        render();
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  FULL RENDER  (called on load, year change, add/delete)
+    // ════════════════════════════════════════════════════════════════
+    function render() {
+        const y = getY();
+        document.getElementById('tableWrap').innerHTML = buildTable(y);
+        refreshSummary(y);
+        refreshCharts(y);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  MODAL
+    // ════════════════════════════════════════════════════════════════
+    let modalGid = 'savings';
+
+    function openModal(gid) {
+        modalGid = gid;
+        const g  = GROUPS.find(g => g.id === gid);
+        document.getElementById('modalTitle').textContent = `Add to ${g?.label ?? 'Group'}`;
+        document.getElementById('modalSub').textContent   =
+            `This account will appear in all years.`;
+        document.getElementById('mName').value = '';
+        document.getElementById('overlay').classList.add('open');
+        setTimeout(() => document.getElementById('mName').focus(), 40);
+    }
+
+    function closeModal() { document.getElementById('overlay').classList.remove('open'); }
+
+    function confirmAdd() {
+        const name = document.getElementById('mName').value.trim();
+        if (!name) { document.getElementById('mName').focus(); return; }
+        if (!STATE.accounts[modalGid]) STATE.accounts[modalGid] = [];
+        STATE.accounts[modalGid].push({ id: uid(), name });
+        persist();
+        closeModal();
+        render();
+    }
+
+    document.getElementById('overlay').addEventListener('click', e => {
+        if (e.target === e.currentTarget) closeModal();
+    });
+    document.getElementById('mName').addEventListener('keydown', e => {
+        if (e.key === 'Enter')  confirmAdd();
+        if (e.key === 'Escape') closeModal();
+    });
+
+    // ════════════════════════════════════════════════════════════════
+    //  YEAR SELECTOR
+    // ════════════════════════════════════════════════════════════════
+    function buildYearSel() {
+        const sel = document.getElementById('yearSel');
+        const cur = new Date().getFullYear();
+        for (let y = cur + 1; y >= cur - 5; y--) {
+            const o    = document.createElement('option');
+            o.value    = y;
+            o.textContent = y;
+            if (y === cur) o.selected = true;
+            sel.appendChild(o);
+        }
+        sel.addEventListener('change', render);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  INIT
+    // ════════════════════════════════════════════════════════════════
+    document.getElementById('hDate').textContent =
+        new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+    loadState();
+    buildYearSel();
+    initCharts();
+    render();
+</script>
+</body>
+</html>
