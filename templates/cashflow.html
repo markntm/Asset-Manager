@@ -487,7 +487,7 @@
     //  CONSTANTS
     // ════════════════════════════════════════════════════════════════
     const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const SK     = 'ft_cashflow'; // localStorage key
+    const API    = '';   // same origin — FastAPI serves the HTML
 
     const TBADGE_HTML = {
         'discretionary': '<span class="tbadge discretionary">Discretionary</span>',
@@ -499,6 +499,11 @@
         '#6c63ff','#4ade80','#f59e0b','#60a5fa',
         '#f87171','#e879f9','#34d399','#fb923c','#a78bfa','#38bdf8'
     ];
+
+    // ════════════════════════════════════════════════════════════════
+    //  IN-MEMORY STATE  (loaded from API, not localStorage)
+    // ════════════════════════════════════════════════════════════════
+    let STATE = { income: [], expenses: [] };
 
     // ════════════════════════════════════════════════════════════════
     //  HELPERS
@@ -515,78 +520,70 @@
     const getY   = ()  => parseInt(document.getElementById('yearSel').value);
 
     // ════════════════════════════════════════════════════════════════
-    //  STATE  (in-memory + localStorage)
+    //  API CALLS
     // ════════════════════════════════════════════════════════════════
-    let STATE = {};
-
-    function loadState() {
-        try { STATE = JSON.parse(localStorage.getItem(SK)) || {}; }
-        catch { STATE = {}; }
+    async function apiFetch(path, options = {}) {
+        const res = await fetch(API + path, {
+            headers: { 'Content-Type': 'application/json' },
+            ...options,
+        });
+        if (!res.ok) {
+            console.error(`API error ${res.status}:`, path);
+            return null;
+        }
+        return res.json();
     }
 
-    function persist() {
-        localStorage.setItem(SK, JSON.stringify(STATE));
-        // API stub — uncomment once FastAPI is ready:
-        // fetch('/api/cashflow', { method:'POST', headers:{'Content-Type':'application/json'},
-        //   body: JSON.stringify(STATE) });
+    async function loadYear(year) {
+        const data = await apiFetch(`/api/cashflow/data/${year}`);
+        if (data) {
+            STATE.income   = data.income;
+            STATE.expenses = data.expenses;
+        }
     }
 
-    function getYD(y) {
-        if (!STATE[y]) STATE[y] = blankYear();
-        return STATE[y];
-    }
-
-    function blankYear() {
-        return {
-            income: [
-                { id: uid(), name: 'Job 1', values: {} },
-                { id: uid(), name: 'Job 2', values: {} },
-            ],
-            expenses: [
-                { id: uid(), name: 'Dining',        type: 'discretionary', values: {} },
-                { id: uid(), name: 'Education',     type: 'one-time',      values: {} },
-                { id: uid(), name: 'Entertainment', type: 'discretionary', values: {} },
-                { id: uid(), name: 'Rent',          type: 'fixed',         values: {} },
-            ]
-        };
+    async function saveCell(table, rowId, year, monthIdx, value) {
+        await apiFetch('/api/cashflow/cells', {
+            method: 'PUT',
+            body: JSON.stringify({
+                table, row_id: rowId, year,
+                month_idx: monthIdx,
+                value: value === '' ? null : parseFloat(value),
+            }),
+        });
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  CELL EVENT HANDLERS
-    //  oninput  → live update totals + charts (no localStorage write)
-    //  onblur   → persist to localStorage (fires once on leaving cell)
+    //  CELL HANDLERS
     // ════════════════════════════════════════════════════════════════
     function onInput(tbl, rowId, mi, val) {
-        const yd  = getYD(getY());
-        const arr = tbl === 'income' ? yd.income : yd.expenses;
+        const arr = tbl === 'income' ? STATE.income : STATE.expenses;
         const row = arr.find(r => r.id === rowId);
         if (!row) return;
-
         const v = parseFloat(val);
         if (isNaN(v) || val.trim() === '') delete row.values[mi];
         else row.values[mi] = v;
 
-        // Targeted DOM updates — no full re-render, focus is preserved
-        refreshTotals(tbl, yd);
-        refreshSummary(yd);
-        refreshCharts(yd);
+        refreshTotals(tbl);
+        refreshSummary();
+        refreshCharts();
     }
 
-    function onBlur() { persist(); }
+    async function onBlur(tbl, rowId, mi, val) {
+        await saveCell(tbl, rowId, getY(), mi, val);
+    }
 
     // ════════════════════════════════════════════════════════════════
-    //  TARGETED TOTALS REFRESH  (updates only total cells in the DOM)
+    //  TARGETED TOTALS REFRESH
     // ════════════════════════════════════════════════════════════════
-    function refreshTotals(tbl, yd) {
-        const rows = tbl === 'income' ? yd.income : yd.expenses;
+    function refreshTotals(tbl) {
+        const rows = tbl === 'income' ? STATE.income : STATE.expenses;
 
-        // Row totals
         rows.forEach(r => {
             const el = document.getElementById(`rt-${tbl}-${r.id}`);
             if (el) el.textContent = fmtN(rowSum(r));
         });
 
-        // Monthly column totals + grand total
         let grand = 0;
         MONTHS.forEach((_, mi) => {
             const mTot = rows.reduce((s, r) => s + (parseFloat(r.values[mi]) || 0), 0);
@@ -600,23 +597,21 @@
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  YEAR SUMMARY CARDS
+    //  YEAR SUMMARY
     // ════════════════════════════════════════════════════════════════
-    function refreshSummary(yd) {
-        const inc = yd.income.reduce((s, r) => s + rowSum(r), 0);
-        const exp = yd.expenses.reduce((s, r) => s + rowSum(r), 0);
+    function refreshSummary() {
+        const inc = STATE.income.reduce((s, r) => s + rowSum(r), 0);
+        const exp = STATE.expenses.reduce((s, r) => s + rowSum(r), 0);
         const net = inc - exp;
-
         document.getElementById('ys-inc').textContent = fmtN(inc);
         document.getElementById('ys-exp').textContent = fmtN(exp);
-
-        const netEl       = document.getElementById('ys-net');
+        const netEl = document.getElementById('ys-net');
         netEl.textContent = fmtN(net);
         netEl.style.color = net >= 0 ? 'var(--green)' : 'var(--red)';
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  CHART INSTANCES
+    //  CHARTS
     // ════════════════════════════════════════════════════════════════
     let barC = null, pieC = null;
 
@@ -630,90 +625,52 @@
             data: {
                 labels: MONTHS,
                 datasets: [
-                    {
-                        label: 'Income',
-                        data: Array(12).fill(0),
-                        backgroundColor: 'rgba(74,222,128,0.75)',
-                        borderRadius: 4, borderSkipped: false
-                    },
-                    {
-                        label: 'Expenses',
-                        data: Array(12).fill(0),
-                        backgroundColor: 'rgba(248,113,113,0.75)',
-                        borderRadius: 4, borderSkipped: false
-                    }
+                    { label:'Income',   data: Array(12).fill(0), backgroundColor:'rgba(74,222,128,0.75)', borderRadius:4, borderSkipped:false },
+                    { label:'Expenses', data: Array(12).fill(0), backgroundColor:'rgba(248,113,113,0.75)', borderRadius:4, borderSkipped:false },
                 ]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { padding: 12, usePointStyle: true, pointStyleWidth: 8 }
-                    },
-                    tooltip: {
-                        backgroundColor: '#222536', borderColor: '#2e3249', borderWidth: 1,
-                        callbacks: { label: ctx => ' ' + fmtN(ctx.parsed.y) }
-                    }
+                responsive:true, maintainAspectRatio:false,
+                plugins:{
+                    legend:{ position:'bottom', labels:{ padding:12, usePointStyle:true, pointStyleWidth:8 } },
+                    tooltip:{ backgroundColor:'#222536', borderColor:'#2e3249', borderWidth:1,
+                        callbacks:{ label: ctx => ' '+fmtN(ctx.parsed.y) } }
                 },
-                scales: {
-                    x: { grid: { color: '#2e3249' }, border: { display: false } },
-                    y: {
-                        grid: { color: '#2e3249' }, border: { display: false },
-                        ticks: { callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v) }
-                    }
+                scales:{
+                    x:{ grid:{ color:'#2e3249' }, border:{ display:false } },
+                    y:{ grid:{ color:'#2e3249' }, border:{ display:false },
+                        ticks:{ callback: v => '$'+(v>=1000?(v/1000).toFixed(0)+'k':v) } }
                 }
             }
         });
 
         pieC = new Chart(document.getElementById('pieChart'), {
-            type: 'doughnut',
-            data: {
-                labels: [],
-                datasets: [{
-                    data: [],
-                    backgroundColor: PIE_COLORS,
-                    borderColor: '#1a1d27',
-                    borderWidth: 3,
-                    hoverOffset: 6
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '62%',
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { padding: 10, usePointStyle: true, pointStyleWidth: 8 }
-                    },
-                    tooltip: {
-                        backgroundColor: '#222536', borderColor: '#2e3249', borderWidth: 1,
-                        callbacks: { label: ctx => ' ' + fmtN(ctx.parsed) + '  (' + ctx.label + ')' }
-                    }
+            type:'doughnut',
+            data:{ labels:[], datasets:[{ data:[], backgroundColor:PIE_COLORS, borderColor:'#1a1d27', borderWidth:3, hoverOffset:6 }] },
+            options:{
+                responsive:true, maintainAspectRatio:false, cutout:'62%',
+                plugins:{
+                    legend:{ position:'bottom', labels:{ padding:10, usePointStyle:true, pointStyleWidth:8 } },
+                    tooltip:{ backgroundColor:'#222536', borderColor:'#2e3249', borderWidth:1,
+                        callbacks:{ label: ctx => ' '+fmtN(ctx.parsed)+'  ('+ctx.label+')' } }
                 }
             }
         });
     }
 
-    function refreshCharts(yd) {
-        // Bar: monthly income & expense totals
+    function refreshCharts() {
         barC.data.datasets[0].data = MONTHS.map((_, i) =>
-            yd.income.reduce((s, r) => s + (parseFloat(r.values[i]) || 0), 0));
+            STATE.income.reduce((s, r) => s + (parseFloat(r.values[i]) || 0), 0));
         barC.data.datasets[1].data = MONTHS.map((_, i) =>
-            yd.expenses.reduce((s, r) => s + (parseFloat(r.values[i]) || 0), 0));
+            STATE.expenses.reduce((s, r) => s + (parseFloat(r.values[i]) || 0), 0));
         barC.update();
 
-        // Pie: discretionary categories only
-        const disc   = yd.expenses.filter(r => r.type === 'discretionary');
+        const disc   = STATE.expenses.filter(r => r.type === 'discretionary');
         const dData  = disc.map(r => rowSum(r));
-        const dTotal = dData.reduce((a, b) => a + b, 0);
-
-        pieC.data.labels             = disc.map(r => r.name);
-        pieC.data.datasets[0].data   = dData;
+        const dTotal = dData.reduce((a,b) => a+b, 0);
+        pieC.data.labels           = disc.map(r => r.name);
+        pieC.data.datasets[0].data = dData;
         pieC.update();
-
         document.getElementById('discSub').textContent = fmtN(dTotal) + ' YTD';
     }
 
@@ -722,86 +679,68 @@
     // ════════════════════════════════════════════════════════════════
     function buildTable(tbl, rows) {
         const isExp = tbl === 'expense';
-
-        // Month header cells
         const mHead = MONTHS.map(m => `<th>${m}</th>`).join('');
         const typeHead = isExp ? `<th class="s-type" style="text-align:left">Type</th>` : '';
 
-        // Body rows
         const body = rows.map(row => {
             const cells = MONTHS.map((_, i) => {
                 const v = row.values[i] !== undefined ? row.values[i] : '';
-                return `<td class="num"><input
-        type="number" class="cell-input"
-        placeholder="—" value="${v}"
-        oninput="onInput('${tbl}','${row.id}',${i},this.value)"
-        onblur="onBlur()"/></td>`;
+                return `<td class="num"><input type="number" class="cell-input" placeholder="—" value="${v}"
+                    oninput="onInput('${tbl}','${row.id}',${i},this.value)"
+                    onblur="onBlur('${tbl}','${row.id}',${i},this.value)"/></td>`;
             }).join('');
-
-            const typeCell = isExp
-                ? `<td class="s-type">${TBADGE_HTML[row.type] ?? ''}</td>`
-                : '';
-
+            const typeCell = isExp ? `<td class="s-type">${TBADGE_HTML[row.type] || ''}</td>` : '';
             return `<tr>
-      <td class="s-cat">${esc(row.name)}</td>
-      ${typeCell}
-      ${cells}
-      <td class="row-total-cell" id="rt-${tbl}-${row.id}">${fmtN(rowSum(row))}</td>
-      <td class="del-col">
-        <button class="btn-del" onclick="delRow('${tbl}','${row.id}')">✕</button>
-      </td>
-    </tr>`;
+                <td class="s-cat">${esc(row.name)}</td>
+                ${typeCell}${cells}
+                <td class="row-total-cell" id="rt-${tbl}-${row.id}">${fmtN(rowSum(row))}</td>
+                <td class="del-col"><button class="btn-del" onclick="delRow('${tbl}','${row.id}')">✕</button></td>
+            </tr>`;
         }).join('');
 
-        // Footer totals row
-        const mTotals  = MONTHS.map((_, i) =>
-            rows.reduce((s, r) => s + (parseFloat(r.values[i]) || 0), 0));
-        const grand    = mTotals.reduce((a, b) => a + b, 0);
-        const footCols = mTotals.map((t, i) =>
-            `<td class="num" id="ct-${tbl}-${i}">${fmtN(t)}</td>`).join('');
+        const mTotals  = MONTHS.map((_, i) => rows.reduce((s, r) => s + (parseFloat(r.values[i]) || 0), 0));
+        const grand    = mTotals.reduce((a,b) => a+b, 0);
+        const footCols = mTotals.map((t, i) => `<td class="num" id="ct-${tbl}-${i}">${fmtN(t)}</td>`).join('');
         const typeFootCell = isExp ? `<td class="s-type"></td>` : '';
 
         return `<table>
-    <thead><tr>
-      <th class="s-cat" style="text-align:left">Category</th>
-      ${typeHead}
-      ${mHead}
-      <th style="text-align:right; min-width:88px; padding-right:14px">Year Total</th>
-      <th style="width:28px"></th>
-    </tr></thead>
-    <tbody>${body}</tbody>
-    <tfoot><tr class="total-row">
-      <td class="s-cat">Monthly Total</td>
-      ${typeFootCell}
-      ${footCols}
-      <td class="row-total-cell" id="gt-${tbl}">${fmtN(grand)}</td>
-      <td></td>
-    </tr></tfoot>
-  </table>`;
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    //  FULL RENDER  (called on load, year change, add/delete)
-    // ════════════════════════════════════════════════════════════════
-    function render() {
-        const y  = getY();
-        const yd = getYD(y);
-        document.getElementById('incWrap').innerHTML = buildTable('income',  yd.income);
-        document.getElementById('expWrap').innerHTML = buildTable('expense', yd.expenses);
-        refreshSummary(yd);
-        refreshCharts(yd);
+            <thead><tr>
+                <th class="s-cat" style="text-align:left">Category</th>
+                ${typeHead}${mHead}
+                <th style="text-align:right; min-width:88px; padding-right:14px">Year Total</th>
+                <th style="width:28px"></th>
+            </tr></thead>
+            <tbody>${body}</tbody>
+            <tfoot><tr class="total-row">
+                <td class="s-cat">Monthly Total</td>
+                ${typeFootCell}${footCols}
+                <td class="row-total-cell" id="gt-${tbl}">${fmtN(grand)}</td>
+                <td></td>
+            </tr></tfoot>
+        </table>`;
     }
 
     // ════════════════════════════════════════════════════════════════
     //  DELETE ROW
     // ════════════════════════════════════════════════════════════════
-    function delRow(tbl, rowId) {
-        const y  = getY();
-        const yd = getYD(y);
-        if (tbl === 'income') yd.income   = yd.income.filter(r => r.id !== rowId);
-        else                  yd.expenses = yd.expenses.filter(r => r.id !== rowId);
-        persist();
+    async function delRow(tbl, rowId) {
+        const path = tbl === 'income'
+            ? `/api/cashflow/categories/income/${rowId}`
+            : `/api/cashflow/categories/expense/${rowId}`;
+        await apiFetch(path, { method: 'DELETE' });
+        if (tbl === 'income') STATE.income   = STATE.income.filter(r => r.id !== rowId);
+        else                  STATE.expenses = STATE.expenses.filter(r => r.id !== rowId);
         render();
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  FULL RENDER
+    // ════════════════════════════════════════════════════════════════
+    function render() {
+        document.getElementById('incWrap').innerHTML = buildTable('income',  STATE.income);
+        document.getElementById('expWrap').innerHTML = buildTable('expense', STATE.expenses);
+        refreshSummary();
+        refreshCharts();
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -819,29 +758,32 @@
         setTimeout(() => document.getElementById('mName').focus(), 40);
     }
 
-    function closeModal() {
-        document.getElementById('overlay').classList.remove('open');
-    }
+    function closeModal() { document.getElementById('overlay').classList.remove('open'); }
 
-    function confirmAdd() {
+    async function confirmAdd() {
         const name = document.getElementById('mName').value.trim();
         if (!name) { document.getElementById('mName').focus(); return; }
         const type = document.getElementById('mType').value;
-        const y    = getY();
-        const yd   = getYD(y);
 
+        let result;
         if (modalMode === 'income') {
-            yd.income.push({ id: uid(), name, values: {} });
+            result = await apiFetch('/api/cashflow/categories/income', {
+                method: 'POST',
+                body: JSON.stringify({ name }),
+            });
+            if (result) STATE.income.push({ id: result.id, name: result.name, values: {} });
         } else {
-            yd.expenses.push({ id: uid(), name, type, values: {} });
+            result = await apiFetch('/api/cashflow/categories/expense', {
+                method: 'POST',
+                body: JSON.stringify({ name, type }),
+            });
+            if (result) STATE.expenses.push({ id: result.id, name: result.name, type: result.type, values: {} });
         }
 
-        persist();
         closeModal();
         render();
     }
 
-    // Close on backdrop click or Escape
     document.getElementById('overlay').addEventListener('click', e => {
         if (e.target === e.currentTarget) closeModal();
     });
@@ -857,25 +799,26 @@
         const sel = document.getElementById('yearSel');
         const cur = new Date().getFullYear();
         for (let y = cur + 1; y >= cur - 5; y--) {
-            const o    = document.createElement('option');
-            o.value    = y;
-            o.textContent = y;
+            const o = document.createElement('option');
+            o.value = y; o.textContent = y;
             if (y === cur) o.selected = true;
             sel.appendChild(o);
         }
-        sel.addEventListener('change', render);
+        sel.addEventListener('change', async () => {
+            await loadYear(getY());
+            render();
+        });
     }
 
     // ════════════════════════════════════════════════════════════════
     //  INIT
     // ════════════════════════════════════════════════════════════════
     document.getElementById('hDate').textContent =
-        new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        new Date().toLocaleDateString('en-US', { month:'long', year:'numeric' });
 
-    loadState();
     buildYearSel();
     initCharts();
-    render();
+    loadYear(getY()).then(render);
 </script>
 </body>
 </html>

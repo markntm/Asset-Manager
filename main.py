@@ -7,23 +7,30 @@ from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse, FileResponse
+from contextlib import asynccontextmanager
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional
 import uvicorn
+import os
 
-import database as db
-
+import database.database as db
 
 # ═══════════════════════════════════════════════════════════════════
 #  APP SETUP
 # ═══════════════════════════════════════════════════════════════════
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Create SQLite tables on first run."""
+    db.init_db()
+    yield
+
 app = FastAPI(
     title       = "FinTrack API",
     version     = "1.0.0",
     description = "Personal finance tracker — cash flow, net worth, and allocation",
+    lifespan    = lifespan
 )
 
 # CORS — open for local dev; lock down origins in production
@@ -35,15 +42,7 @@ app.add_middleware(
     allow_headers     = ["*"],
 )
 
-# Jinja2 serves the three HTML pages (no server-side templating used)
-templates = Jinja2Templates(directory="templates")
-
-
-@app.on_event("startup")
-async def on_startup() -> None:
-    """Create SQLite tables on first run."""
-    db.init_db()
-
+TEMPLATES = os.path.join(os.path.dirname(__file__), "templates")
 
 # ═══════════════════════════════════════════════════════════════════
 #  PYDANTIC MODELS
@@ -164,24 +163,22 @@ class DashboardSummaryOut(BaseModel):
     allocation:        Dict[str, float]       # {savings, investments, assets}
     accounts:          List[AccountSnapshotOut]
 
-
 # ═══════════════════════════════════════════════════════════════════
 #  HTML PAGE ROUTES
 #  Serve each page; update nav hrefs in HTML from *.html to these paths
 # ═══════════════════════════════════════════════════════════════════
 
-@app.get("/", response_class=HTMLResponse, include_in_schema=False)
-async def page_dashboard(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+@app.get("/", response_class=FileResponse, include_in_schema=False)
+async def page_dashboard():
+    return FileResponse(os.path.join(TEMPLATES, "dashboard.html"))
 
-@app.get("/cashflow", response_class=HTMLResponse, include_in_schema=False)
-async def page_cashflow(request: Request):
-    return templates.TemplateResponse("cashflow.html", {"request": request})
+@app.get("/cashflow", response_class=FileResponse, include_in_schema=False)
+async def page_cashflow():
+    return FileResponse(os.path.join(TEMPLATES, "cashflow.html"))
 
-@app.get("/networth", response_class=HTMLResponse, include_in_schema=False)
-async def page_networth(request: Request):
-    return templates.TemplateResponse("networth.html", {"request": request})
-
+@app.get("/networth", response_class=FileResponse, include_in_schema=False)
+async def page_networth():
+    return FileResponse(os.path.join(TEMPLATES, "networth.html"))
 
 # ═══════════════════════════════════════════════════════════════════
 #  DASHBOARD  /api/dashboard
@@ -200,7 +197,6 @@ async def get_dashboard_summary():
     trend, group allocation, and per-account overview.
     """
     return db.get_dashboard_summary()
-
 
 # ═══════════════════════════════════════════════════════════════════
 #  CASH FLOW  /api/cashflow
@@ -318,7 +314,6 @@ async def upsert_cashflow_cell(body: CashFlowCellIn):
     )
     return OkResponse()
 
-
 # ═══════════════════════════════════════════════════════════════════
 #  NET WORTH  /api/networth
 # ═══════════════════════════════════════════════════════════════════
@@ -407,10 +402,10 @@ async def upsert_networth_cell(body: NetWorthCellIn):
     )
     return OkResponse()
 
-
 # ═══════════════════════════════════════════════════════════════════
 #  ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
+    print("Link: " + "http://127.0.0.1:8000/")
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

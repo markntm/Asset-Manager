@@ -539,13 +539,27 @@
 
     async function loadDashboard() {
         try {
-            const summary = await fetch(`${API}/dashboard/summary`).then(r => r.json());
-            populateCards(summary);
-            populateAccountsTable(summary.accounts);
-            // updateNwChart(summary.net_worth_trend);
-            // updateDonut(summary.allocation);
-        } catch (_) {
-            // API not connected yet — UI shows placeholder state
+            const data = await fetch('/api/dashboard/summary').then(r => r.json());
+            populateCards(data);
+            populateAccountsTable(data.accounts);
+
+            // Net worth trend
+            nwChart.data.labels           = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            nwChart.data.datasets[0].data = data.net_worth_trend;
+            nwChart.update();
+
+            // Allocation donut
+            const donut = Chart.getChart('allocationDonut');
+            if (donut) {
+                donut.data.datasets[0].data = [
+                    data.allocation.savings,
+                    data.allocation.investments,
+                    data.allocation.assets,
+                ];
+                donut.update();
+            }
+        } catch (e) {
+            console.warn('Dashboard API error:', e);
         }
     }
 

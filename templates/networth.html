@@ -535,184 +535,138 @@
 
 <script>
     // ════════════════════════════════════════════════════════════════
-    //  CONSTANTS & GROUP CONFIG
+    //  CONSTANTS
     // ════════════════════════════════════════════════════════════════
     const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const SK     = 'ft_networth';
+    const API    = '';
 
-    // Fixed top-level groups — users add subcategories (accounts), not groups
     const GROUPS = [
-        { id: 'savings',     label: 'Savings / Cash', color: '#60a5fa', icon: '🏦', scId: 'sc-sav' },
-        { id: 'investments', label: 'Investments',     color: '#4ade80', icon: '📈', scId: 'sc-inv' },
-        { id: 'assets',      label: 'Assets',          color: '#f59e0b', icon: '🏠', scId: 'sc-ast' },
+        { id:'savings',     label:'Savings / Cash', color:'#60a5fa', icon:'🏦', scId:'sc-sav' },
+        { id:'investments', label:'Investments',     color:'#4ade80', icon:'📈', scId:'sc-inv' },
+        { id:'assets',      label:'Assets',          color:'#f59e0b', icon:'🏠', scId:'sc-ast' },
     ];
+
+    // ════════════════════════════════════════════════════════════════
+    //  IN-MEMORY STATE
+    // ════════════════════════════════════════════════════════════════
+    let STATE = {
+        accounts: { savings: [], investments: [], assets: [] },
+        rows: [],
+    };
 
     // ════════════════════════════════════════════════════════════════
     //  HELPERS
     // ════════════════════════════════════════════════════════════════
     const uid  = () => Math.random().toString(36).slice(2, 9);
-    const esc  = s  => String(s)
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const esc  = s  => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const fmtN = n  => {
         if (n == null || isNaN(n)) return '$0';
         return (n < 0 ? '−$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US');
     };
     const getY = () => parseInt(document.getElementById('yearSel').value);
 
-    // ════════════════════════════════════════════════════════════════
-    //  STATE
-    //  {
-    //    accounts: {
-    //      savings:     [{ id, name }, …],
-    //      investments: [{ id, name }, …],
-    //      assets:      [{ id, name }, …],
-    //    },
-    //    values: {
-    //      "2026": { "<itemId>": { 0: 5000, 1: 5250, … }, … }
-    //    }
-    //  }
-    //
-    //  accounts are shared across all years — only values are per-year.
-    //  Deleting an account removes it from all years.
-    // ════════════════════════════════════════════════════════════════
-    let STATE = {};
-
-    function loadState() {
-        try {
-            const raw = localStorage.getItem(SK);
-            STATE = raw ? JSON.parse(raw) : defaultState();
-            if (!STATE.accounts) STATE.accounts = defaultAccounts();
-            if (!STATE.values)   STATE.values   = {};
-        } catch { STATE = defaultState(); }
+    function getVal(itemId, mi) {
+        const row = STATE.rows.find(r => r.id === itemId);
+        return row ? (parseFloat(row.values[mi]) || undefined) : undefined;
     }
 
-    function defaultState() {
-        return { accounts: defaultAccounts(), values: {} };
+    function groupTotal(gid, mi) {
+        return (STATE.accounts[gid] || []).reduce((s, item) => {
+            const row = STATE.rows.find(r => r.id === item.id);
+            return s + (row ? (parseFloat(row.values[mi]) || 0) : 0);
+        }, 0);
     }
 
-    function defaultAccounts() {
-        return {
-            savings: [
-                { id: uid(), name: 'CPB Checkings'    },
-                { id: uid(), name: 'Capital One HYSA' },
-            ],
-            investments: [
-                { id: uid(), name: 'Schwab Brokerage' },
-                { id: uid(), name: 'Roth IRA'         },
-                { id: uid(), name: 'VOO ETF'          },
-            ],
-            assets: [
-                { id: uid(), name: 'Home Value' },
-                { id: uid(), name: 'Vehicle'    },
-            ],
-        };
+    function nwTotal(mi) {
+        return GROUPS.reduce((s, g) => s + groupTotal(g.id, mi), 0);
     }
 
-    function persist() {
-        localStorage.setItem(SK, JSON.stringify(STATE));
-        // API stub — uncomment when FastAPI is ready:
-        // fetch('/api/networth', {
-        //   method: 'POST',
-        //   headers: { 'Content-Type': 'application/json' },
-        //   body: JSON.stringify(STATE)
-        // });
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    //  DATA ACCESS
-    // ════════════════════════════════════════════════════════════════
-    function getVal(itemId, year, mi) {
-        const v = STATE.values[year]?.[itemId]?.[mi];
-        return v !== undefined ? parseFloat(v) : undefined;
-    }
-
-    function setVal(itemId, year, mi, rawVal) {
-        if (!STATE.values[year])           STATE.values[year]           = {};
-        if (!STATE.values[year][itemId])   STATE.values[year][itemId]   = {};
-        const v = parseFloat(rawVal);
-        if (isNaN(v) || String(rawVal).trim() === '') {
-            delete STATE.values[year][itemId][mi];
-            if (!Object.keys(STATE.values[year][itemId]).length)
-                delete STATE.values[year][itemId];
-        } else {
-            STATE.values[year][itemId][mi] = v;
-        }
-    }
-
-    function groupTotal(gid, year, mi) {
-        return (STATE.accounts[gid] || [])
-            .reduce((s, item) => s + (getVal(item.id, year, mi) ?? 0), 0);
-    }
-
-    function netWorth(year, mi) {
-        return GROUPS.reduce((s, g) => s + groupTotal(g.id, year, mi), 0);
-    }
-
-    // Find the latest month index (0–11) with any entered value; null if none.
-    function latestFilledMonth(year) {
+    function latestFilledMonth() {
         for (let mi = 11; mi >= 0; mi--) {
-            for (const g of GROUPS) {
-                for (const item of (STATE.accounts[g.id] || [])) {
-                    if (getVal(item.id, year, mi) !== undefined) return mi;
-                }
-            }
+            if (STATE.rows.some(r => r.values[mi] !== undefined)) return mi;
         }
         return null;
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  CELL HANDLERS
-    //  oninput → fast targeted DOM refresh (no localStorage write)
-    //  onblur  → persist to localStorage (fires once on leaving cell)
+    //  API CALLS
     // ════════════════════════════════════════════════════════════════
-    function onInput(itemId, year, mi, rawVal) {
-        setVal(itemId, year, mi, rawVal);
+    async function apiFetch(path, options = {}) {
+        const res = await fetch(API + path, {
+            headers: { 'Content-Type': 'application/json' },
+            ...options,
+        });
+        if (!res.ok) { console.error(`API ${res.status}:`, path); return null; }
+        return res.json();
+    }
 
-        // Find parent group
+    async function loadYear(year) {
+        const data = await apiFetch(`/api/networth/data/${year}`);
+        if (data) {
+            STATE.accounts = data.accounts;
+            STATE.rows     = data.rows;
+        }
+    }
+
+    async function saveCell(itemId, year, monthIdx, value) {
+        await apiFetch('/api/networth/cells', {
+            method: 'PUT',
+            body: JSON.stringify({
+                item_id: itemId, year,
+                month_idx: monthIdx,
+                value: value === '' ? null : parseFloat(value),
+            }),
+        });
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  CELL HANDLERS
+    // ════════════════════════════════════════════════════════════════
+    function onInput(itemId, year, mi, val) {
+        const row = STATE.rows.find(r => r.id === itemId);
+        if (!row) return;
+        const v = parseFloat(val);
+        if (isNaN(v) || val.trim() === '') delete row.values[mi];
+        else row.values[String(mi)] = v;
+
         const gid = GROUPS.find(g =>
             (STATE.accounts[g.id] || []).some(i => i.id === itemId))?.id;
 
-        // Update this month's group subtotal + net worth total
         if (gid) {
             const subEl = document.getElementById(`sub-${gid}-${mi}`);
-            if (subEl) subEl.textContent = fmtN(groupTotal(gid, year, mi));
+            if (subEl) subEl.textContent = fmtN(groupTotal(gid, mi));
         }
         const nwEl = document.getElementById(`nw-${mi}`);
-        if (nwEl) nwEl.textContent = fmtN(netWorth(year, mi));
+        if (nwEl) nwEl.textContent = fmtN(nwTotal(mi));
 
-        // Refresh "Latest" column, summary cards, charts
-        refreshLatestColumn(year);
-        refreshSummary(year);
-        refreshCharts(year);
+        refreshLatestColumn();
+        refreshSummary();
+        refreshCharts();
     }
 
-    function onBlur() { persist(); }
+    async function onBlur(itemId, year, mi, val) {
+        await saveCell(itemId, year, mi, val);
+    }
 
     // ════════════════════════════════════════════════════════════════
-    //  TARGETED "LATEST" COLUMN REFRESH
-    //  Uses data-* attributes so no re-render needed.
+    //  TARGETED LATEST COLUMN REFRESH
     // ════════════════════════════════════════════════════════════════
-    function refreshLatestColumn(year) {
-        const lfm = latestFilledMonth(year);
+    function refreshLatestColumn() {
+        const lfm = latestFilledMonth();
 
-        // Item cells
         document.querySelectorAll('[data-lat-item]').forEach(el => {
-            const v = lfm !== null ? getVal(el.dataset.latItem, year, lfm) : undefined;
-            el.textContent = v !== undefined ? fmtN(v) : '—';
+            const row = STATE.rows.find(r => r.id === el.dataset.latItem);
+            const v   = lfm !== null && row ? row.values[lfm] : undefined;
+            el.textContent = v !== undefined ? fmtN(parseFloat(v)) : '—';
         });
 
-        // Group subtotal cells
         document.querySelectorAll('[data-lat-group]').forEach(el => {
-            el.textContent = lfm !== null
-                ? fmtN(groupTotal(el.dataset.latGroup, year, lfm)) : '—';
+            el.textContent = lfm !== null ? fmtN(groupTotal(el.dataset.latGroup, lfm)) : '—';
         });
 
-        // Net worth cell
         const nwLatEl = document.querySelector('[data-lat-nw]');
-        if (nwLatEl) nwLatEl.textContent = lfm !== null ? fmtN(netWorth(year, lfm)) : '—';
+        if (nwLatEl) nwLatEl.textContent = lfm !== null ? fmtN(nwTotal(lfm)) : '—';
 
-        // Column header label
         const hEl = document.getElementById('latest-header');
         if (hEl) hEl.textContent = lfm !== null ? MONTHS[lfm] : '—';
     }
@@ -720,38 +674,30 @@
     // ════════════════════════════════════════════════════════════════
     //  SUMMARY CARDS
     // ════════════════════════════════════════════════════════════════
-    function refreshSummary(year) {
-        const lfm   = latestFilledMonth(year);
-        const nw    = lfm !== null ? netWorth(year, lfm)    : 0;
-        const prevM = lfm !== null && lfm > 0 ? lfm - 1     : null;
-        const nwPrev = prevM !== null ? netWorth(year, prevM) : null;
+    function refreshSummary() {
+        const lfm   = latestFilledMonth();
+        const nw    = lfm !== null ? nwTotal(lfm) : 0;
+        const prevM = lfm !== null && lfm > 0 ? lfm - 1 : null;
+        const nwPrev = prevM !== null ? nwTotal(prevM) : null;
         const mom    = nwPrev !== null ? nw - nwPrev : null;
 
-        // Net worth + MoM badge
         document.getElementById('sc-nw').textContent = fmtN(nw);
         const momEl = document.getElementById('sc-mom');
-        if (mom === null) {
-            momEl.className   = 'badge fl';
-            momEl.textContent = '—';
-        } else {
-            momEl.className   = `badge ${mom >= 0 ? 'up' : 'dn'}`;
-            momEl.textContent = (mom >= 0 ? '▲ ' : '▼ ') + fmtN(Math.abs(mom));
-        }
+        if (mom === null) { momEl.className='badge fl'; momEl.textContent='—'; }
+        else { momEl.className=`badge ${mom>=0?'up':'dn'}`; momEl.textContent=(mom>=0?'▲ ':'▼ ')+fmtN(Math.abs(mom)); }
 
-        // Per-group cards
         GROUPS.forEach(g => {
-            const val = lfm !== null ? groupTotal(g.id, year, lfm) : 0;
-            const pct = nw > 0 ? ((val / nw) * 100).toFixed(1) + '% of total' : '—';
+            const val = lfm !== null ? groupTotal(g.id, lfm) : 0;
+            const pct = nw > 0 ? ((val/nw)*100).toFixed(1)+'% of total' : '—';
             const valEl = document.getElementById(g.scId);
-            const subEl = document.getElementById(g.scId + '-sub');
+            const subEl = document.getElementById(g.scId+'-sub');
             if (valEl) valEl.textContent = fmtN(val);
             if (subEl) subEl.textContent = pct;
         });
 
-        // Table header meta
         const metaEl = document.getElementById('tsMeta');
         if (metaEl) metaEl.textContent = lfm !== null
-            ? `Latest data: ${MONTHS[lfm]} ${year}`
+            ? `Latest data: ${MONTHS[lfm]} ${getY()}`
             : 'Enter beginning-of-month balances';
     }
 
@@ -765,270 +711,183 @@
     Chart.defaults.font.size   = 11;
 
     function initCharts() {
-        // ── Line chart ───────────────────────────────────────────
-        const lineCtx  = document.getElementById('lineChart');
-        const nwGrad   = lineCtx.getContext('2d').createLinearGradient(0, 0, 0, 215);
-        nwGrad.addColorStop(0,   'rgba(108,99,255,0.2)');
-        nwGrad.addColorStop(1,   'rgba(108,99,255,0.0)');
+        const lineCtx = document.getElementById('lineChart');
+        const nwGrad  = lineCtx.getContext('2d').createLinearGradient(0,0,0,215);
+        nwGrad.addColorStop(0, 'rgba(108,99,255,0.2)');
+        nwGrad.addColorStop(1, 'rgba(108,99,255,0.0)');
 
         lineC = new Chart(lineCtx, {
-            type: 'line',
-            data: {
+            type:'line',
+            data:{
                 labels: MONTHS,
-                datasets: [
-                    {
-                        label: 'Net Worth',
-                        data: Array(12).fill(null),
-                        borderColor: '#6c63ff',
-                        backgroundColor: nwGrad,
-                        borderWidth: 2.5,
-                        tension: 0.4,
-                        pointRadius: 3,
-                        pointBackgroundColor: '#6c63ff',
-                        pointBorderColor: '#1a1d27',
-                        pointBorderWidth: 2,
-                        fill: true,
-                        spanGaps: false,
-                    },
-                    {
-                        label: 'Savings / Cash',
-                        data: Array(12).fill(null),
-                        borderColor: '#60a5fa',
-                        backgroundColor: 'transparent',
-                        borderWidth: 1.5,
-                        tension: 0.4,
-                        pointRadius: 2,
-                        borderDash: [4, 3],
-                        spanGaps: false,
-                    },
-                    {
-                        label: 'Investments',
-                        data: Array(12).fill(null),
-                        borderColor: '#4ade80',
-                        backgroundColor: 'transparent',
-                        borderWidth: 1.5,
-                        tension: 0.4,
-                        pointRadius: 2,
-                        borderDash: [4, 3],
-                        spanGaps: false,
-                    },
-                    {
-                        label: 'Assets',
-                        data: Array(12).fill(null),
-                        borderColor: '#f59e0b',
-                        backgroundColor: 'transparent',
-                        borderWidth: 1.5,
-                        tension: 0.4,
-                        pointRadius: 2,
-                        borderDash: [4, 3],
-                        spanGaps: false,
-                    },
+                datasets:[
+                    { label:'Net Worth',      data:Array(12).fill(null), borderColor:'#6c63ff', backgroundColor:nwGrad, borderWidth:2.5, tension:0.4, pointRadius:3, fill:true, spanGaps:false },
+                    { label:'Savings / Cash', data:Array(12).fill(null), borderColor:'#60a5fa', backgroundColor:'transparent', borderWidth:1.5, tension:0.4, pointRadius:2, borderDash:[4,3], spanGaps:false },
+                    { label:'Investments',    data:Array(12).fill(null), borderColor:'#4ade80', backgroundColor:'transparent', borderWidth:1.5, tension:0.4, pointRadius:2, borderDash:[4,3], spanGaps:false },
+                    { label:'Assets',         data:Array(12).fill(null), borderColor:'#f59e0b', backgroundColor:'transparent', borderWidth:1.5, tension:0.4, pointRadius:2, borderDash:[4,3], spanGaps:false },
                 ]
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { padding: 10, usePointStyle: true, pointStyleWidth: 8 }
-                    },
-                    tooltip: {
-                        backgroundColor: '#222536',
-                        borderColor: '#2e3249',
-                        borderWidth: 1,
-                        callbacks: { label: ctx => ' ' + fmtN(ctx.parsed.y) }
-                    }
+            options:{
+                responsive:true, maintainAspectRatio:false,
+                plugins:{
+                    legend:{ position:'bottom', labels:{ padding:10, usePointStyle:true, pointStyleWidth:8 } },
+                    tooltip:{ backgroundColor:'#222536', borderColor:'#2e3249', borderWidth:1,
+                        callbacks:{ label: ctx => ' '+fmtN(ctx.parsed.y) } }
                 },
-                scales: {
-                    x: { grid: { color: '#2e3249' }, border: { display: false } },
-                    y: {
-                        grid: { color: '#2e3249' }, border: { display: false },
-                        ticks: { callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v) }
-                    }
+                scales:{
+                    x:{ grid:{ color:'#2e3249' }, border:{ display:false } },
+                    y:{ grid:{ color:'#2e3249' }, border:{ display:false },
+                        ticks:{ callback: v => '$'+(v>=1000?(v/1000).toFixed(0)+'k':v) } }
                 }
             }
         });
 
-        // ── Pie chart ────────────────────────────────────────────
         pieC = new Chart(document.getElementById('pieChart'), {
-            type: 'doughnut',
-            data: {
+            type:'doughnut',
+            data:{
                 labels: GROUPS.map(g => g.label),
-                datasets: [{
-                    data: [1, 1, 1],  // equal placeholder until data entered
-                    backgroundColor: GROUPS.map(g => g.color),
-                    borderColor: '#1a1d27',
-                    borderWidth: 3,
-                    hoverOffset: 6,
-                }]
+                datasets:[{ data:[1,1,1], backgroundColor:GROUPS.map(g=>g.color), borderColor:'#1a1d27', borderWidth:3, hoverOffset:6 }]
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '62%',
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                        labels: { padding: 12, usePointStyle: true, pointStyleWidth: 8 }
-                    },
-                    tooltip: {
-                        backgroundColor: '#222536',
-                        borderColor: '#2e3249',
-                        borderWidth: 1,
-                        callbacks: {
-                            label: ctx => ' ' + fmtN(ctx.parsed) + '  (' + ctx.label + ')'
-                        }
-                    }
+            options:{
+                responsive:true, maintainAspectRatio:false, cutout:'62%',
+                plugins:{
+                    legend:{ position:'bottom', labels:{ padding:12, usePointStyle:true, pointStyleWidth:8 } },
+                    tooltip:{ backgroundColor:'#222536', borderColor:'#2e3249', borderWidth:1,
+                        callbacks:{ label: ctx => ' '+fmtN(ctx.parsed)+'  ('+ctx.label+')' } }
                 }
             }
         });
     }
 
-    function refreshCharts(year) {
+    function refreshCharts() {
         const toPoint = v => v > 0 ? v : null;
-
-        // Line: one point per month; null keeps gaps for un-entered months
-        lineC.data.datasets[0].data = MONTHS.map((_, mi) => toPoint(netWorth(year, mi)));
-        lineC.data.datasets[1].data = MONTHS.map((_, mi) => toPoint(groupTotal('savings',     year, mi)));
-        lineC.data.datasets[2].data = MONTHS.map((_, mi) => toPoint(groupTotal('investments', year, mi)));
-        lineC.data.datasets[3].data = MONTHS.map((_, mi) => toPoint(groupTotal('assets',      year, mi)));
+        lineC.data.datasets[0].data = MONTHS.map((_, mi) => toPoint(nwTotal(mi)));
+        lineC.data.datasets[1].data = MONTHS.map((_, mi) => toPoint(groupTotal('savings', mi)));
+        lineC.data.datasets[2].data = MONTHS.map((_, mi) => toPoint(groupTotal('investments', mi)));
+        lineC.data.datasets[3].data = MONTHS.map((_, mi) => toPoint(groupTotal('assets', mi)));
         lineC.update();
 
-        // Pie: latest filled month allocation by group
-        const lfm = latestFilledMonth(year);
+        const lfm = latestFilledMonth();
         const mi  = lfm ?? 0;
-        pieC.data.datasets[0].data = GROUPS.map(g => groupTotal(g.id, year, mi) || 0);
+        pieC.data.datasets[0].data = GROUPS.map(g => groupTotal(g.id, mi) || 0);
         pieC.update();
 
-        document.getElementById('pieSub').textContent  = lfm !== null ? `${MONTHS[lfm]} ${year}` : '—';
-        document.getElementById('lineSub').textContent  = String(year);
+        document.getElementById('pieSub').textContent  = lfm !== null ? `${MONTHS[lfm]} ${getY()}` : '—';
+        document.getElementById('lineSub').textContent = String(getY());
     }
 
     // ════════════════════════════════════════════════════════════════
     //  TABLE BUILDER
     // ════════════════════════════════════════════════════════════════
     function buildTable(year) {
-        const lfm      = latestFilledMonth(year);
+        const lfm      = latestFilledMonth();
         const latLabel = lfm !== null ? MONTHS[lfm] : '—';
-        const TOTAL_COLS = 15; // 1 name + 12 months + 1 latest + 1 del
-
-        const mHead = MONTHS.map(m => `<th>${m}</th>`).join('');
-        let   rows  = '';
+        const TOTAL_COLS = 15;
+        const mHead    = MONTHS.map(m => `<th>${m}</th>`).join('');
+        let   rows     = '';
 
         for (const g of GROUPS) {
             const items = STATE.accounts[g.id] || [];
 
-            // ── Group header row ──────────────────────────────────
             rows += `<tr class="grp-head">
-      <td class="s-cat" colspan="${TOTAL_COLS}">
-        <div class="grp-head-inner">
-          <span class="grp-name">
-            <span class="grp-dot" style="background:${g.color}"></span>
-            ${g.icon}&nbsp;&nbsp;${esc(g.label)}
-          </span>
-          <button class="btn-add" onclick="openModal('${g.id}')">+ Add Account</button>
-        </div>
-      </td>
-    </tr>`;
+                <td class="s-cat" colspan="${TOTAL_COLS}">
+                    <div class="grp-head-inner">
+                        <span class="grp-name">
+                            <span class="grp-dot" style="background:${g.color}"></span>
+                            ${g.icon}&nbsp;&nbsp;${esc(g.label)}
+                        </span>
+                        <button class="btn-add" onclick="openModal('${g.id}')">+ Add Account</button>
+                    </div>
+                </td>
+            </tr>`;
 
-            // ── Account / subcategory rows ────────────────────────
             if (items.length === 0) {
                 rows += `<tr class="item-row">
-        <td class="s-cat" style="color:var(--muted); padding-left:32px; font-style:italic"
-            colspan="${TOTAL_COLS}">No accounts yet — click "+ Add Account" above</td>
-      </tr>`;
+                    <td class="s-cat" style="color:var(--muted);padding-left:32px;font-style:italic"
+                        colspan="${TOTAL_COLS}">No accounts yet — click "+ Add Account" above</td>
+                </tr>`;
             } else {
                 for (const item of items) {
+                    const row   = STATE.rows.find(r => r.id === item.id);
                     const cells = MONTHS.map((_, mi) => {
-                        const v = getVal(item.id, year, mi);
+                        const v = row ? (row.values[mi] !== undefined ? row.values[mi] : '') : '';
                         return `<td class="num"><input type="number" class="cell-input"
-            placeholder="—" value="${v !== undefined ? v : ''}"
-            oninput="onInput('${item.id}',${year},${mi},this.value)"
-            onblur="onBlur()"/></td>`;
+                            placeholder="—" value="${v}"
+                            oninput="onInput('${item.id}',${year},${mi},this.value)"
+                            onblur="onBlur('${item.id}',${year},${mi},this.value)"/></td>`;
                     }).join('');
-
-                    const latV = lfm !== null ? getVal(item.id, year, lfm) : undefined;
-
+                    const latV = lfm !== null && row ? row.values[lfm] : undefined;
                     rows += `<tr class="item-row">
-          <td class="s-cat" style="padding-left:30px; color:var(--muted)">${esc(item.name)}</td>
-          ${cells}
-          <td class="latest-cell" data-lat-item="${item.id}">
-            ${latV !== undefined ? fmtN(latV) : '—'}
-          </td>
-          <td class="del-col">
-            <button class="btn-del" onclick="delAccount('${g.id}','${item.id}')">✕</button>
-          </td>
-        </tr>`;
+                        <td class="s-cat" style="padding-left:30px;color:var(--muted)">${esc(item.name)}</td>
+                        ${cells}
+                        <td class="latest-cell" data-lat-item="${item.id}">
+                            ${latV !== undefined ? fmtN(parseFloat(latV)) : '—'}
+                        </td>
+                        <td class="del-col">
+                            <button class="btn-del" onclick="delAccount('${g.id}','${item.id}')">✕</button>
+                        </td>
+                    </tr>`;
                 }
             }
 
-            // ── Group subtotal row ────────────────────────────────
             const subCells = MONTHS.map((_, mi) =>
-                `<td class="num" id="sub-${g.id}-${mi}">${fmtN(groupTotal(g.id, year, mi))}</td>`
+                `<td class="num" id="sub-${g.id}-${mi}">${fmtN(groupTotal(g.id, mi))}</td>`
             ).join('');
 
             rows += `<tr class="sub-total">
-      <td class="s-cat" style="color:${g.color}; padding-left:18px">${esc(g.label)} Total</td>
-      ${subCells}
-      <td class="latest-cell" data-lat-group="${g.id}">
-        ${lfm !== null ? fmtN(groupTotal(g.id, year, lfm)) : '—'}
-      </td>
-      <td></td>
-    </tr>`;
+                <td class="s-cat" style="color:${g.color};padding-left:18px">${esc(g.label)} Total</td>
+                ${subCells}
+                <td class="latest-cell" data-lat-group="${g.id}">
+                    ${lfm !== null ? fmtN(groupTotal(g.id, lfm)) : '—'}
+                </td>
+                <td></td>
+            </tr>`;
         }
 
-        // ── Grand total (Net Worth) row ───────────────────────────
         const nwCells = MONTHS.map((_, mi) =>
-            `<td class="num" id="nw-${mi}">${fmtN(netWorth(year, mi))}</td>`
+            `<td class="num" id="nw-${mi}">${fmtN(nwTotal(mi))}</td>`
         ).join('');
 
         rows += `<tr class="grand-total">
-    <td class="s-cat">NET WORTH</td>
-    ${nwCells}
-    <td class="latest-cell" data-lat-nw style="color:var(--accent)">
-      ${lfm !== null ? fmtN(netWorth(year, lfm)) : '—'}
-    </td>
-    <td></td>
-  </tr>`;
+            <td class="s-cat">NET WORTH</td>
+            ${nwCells}
+            <td class="latest-cell" data-lat-nw style="color:var(--accent)">
+                ${lfm !== null ? fmtN(nwTotal(lfm)) : '—'}
+            </td>
+            <td></td>
+        </tr>`;
 
         return `<table>
-    <thead>
-      <tr>
-        <th class="s-cat" style="text-align:left">Account / Asset</th>
-        ${mHead}
-        <th id="latest-header"
-            style="text-align:right; min-width:92px; padding-right:14px">
-          ${latLabel}
-        </th>
-        <th style="width:28px"></th>
-      </tr>
-    </thead>
-    <tbody>${rows}</tbody>
-  </table>`;
+            <thead><tr>
+                <th class="s-cat" style="text-align:left">Account / Asset</th>
+                ${mHead}
+                <th id="latest-header" style="text-align:right;min-width:92px;padding-right:14px">
+                    ${latLabel}
+                </th>
+                <th style="width:28px"></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>`;
     }
 
     // ════════════════════════════════════════════════════════════════
     //  DELETE ACCOUNT
-    //  Removes from accounts list + all year values
     // ════════════════════════════════════════════════════════════════
-    function delAccount(gid, itemId) {
+    async function delAccount(gid, itemId) {
+        await apiFetch(`/api/networth/accounts/${itemId}`, { method: 'DELETE' });
         STATE.accounts[gid] = (STATE.accounts[gid] || []).filter(i => i.id !== itemId);
-        Object.keys(STATE.values).forEach(y => {
-            if (STATE.values[y]?.[itemId]) delete STATE.values[y][itemId];
-        });
-        persist();
+        STATE.rows          = STATE.rows.filter(r => r.id !== itemId);
         render();
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  FULL RENDER  (called on load, year change, add/delete)
+    //  FULL RENDER
     // ════════════════════════════════════════════════════════════════
     function render() {
         const y = getY();
         document.getElementById('tableWrap').innerHTML = buildTable(y);
-        refreshSummary(y);
-        refreshCharts(y);
+        refreshSummary();
+        refreshCharts();
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -1040,8 +899,7 @@
         modalGid = gid;
         const g  = GROUPS.find(g => g.id === gid);
         document.getElementById('modalTitle').textContent = `Add to ${g?.label ?? 'Group'}`;
-        document.getElementById('modalSub').textContent   =
-            `This account will appear in all years.`;
+        document.getElementById('modalSub').textContent   = 'This account will appear in all years.';
         document.getElementById('mName').value = '';
         document.getElementById('overlay').classList.add('open');
         setTimeout(() => document.getElementById('mName').focus(), 40);
@@ -1049,12 +907,20 @@
 
     function closeModal() { document.getElementById('overlay').classList.remove('open'); }
 
-    function confirmAdd() {
+    async function confirmAdd() {
         const name = document.getElementById('mName').value.trim();
         if (!name) { document.getElementById('mName').focus(); return; }
-        if (!STATE.accounts[modalGid]) STATE.accounts[modalGid] = [];
-        STATE.accounts[modalGid].push({ id: uid(), name });
-        persist();
+
+        const result = await apiFetch('/api/networth/accounts', {
+            method: 'POST',
+            body: JSON.stringify({ group_id: modalGid, name }),
+        });
+
+        if (result) {
+            STATE.accounts[modalGid].push({ id: result.id, name: result.name, group_id: result.group_id });
+            STATE.rows.push({ id: result.id, name: result.name, group_id: result.group_id, values: {} });
+        }
+
         closeModal();
         render();
     }
@@ -1074,25 +940,26 @@
         const sel = document.getElementById('yearSel');
         const cur = new Date().getFullYear();
         for (let y = cur + 1; y >= cur - 5; y--) {
-            const o    = document.createElement('option');
-            o.value    = y;
-            o.textContent = y;
+            const o = document.createElement('option');
+            o.value = y; o.textContent = y;
             if (y === cur) o.selected = true;
             sel.appendChild(o);
         }
-        sel.addEventListener('change', render);
+        sel.addEventListener('change', async () => {
+            await loadYear(getY());
+            render();
+        });
     }
 
     // ════════════════════════════════════════════════════════════════
     //  INIT
     // ════════════════════════════════════════════════════════════════
     document.getElementById('hDate').textContent =
-        new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        new Date().toLocaleDateString('en-US', { month:'long', year:'numeric' });
 
-    loadState();
     buildYearSel();
     initCharts();
-    render();
+    loadYear(getY()).then(render);
 </script>
 </body>
 </html>
