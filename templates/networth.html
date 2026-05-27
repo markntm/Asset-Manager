@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>FinTrack — Cash Flow</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:        #0f1117;
+            --surface:   #1a1d27;
+            --surface-2: #222536;
+            --border:    #2e3249;
+            --accent:    #6c63ff;
+            --green:     #4ade80;
+            --red:       #f87171;
+            --amber:     #f59e0b;
+            --blue:      #60a5fa;
+            --purple:    #c084fc;
+            --text:      #e2e8f0;
+            --muted:     #8892a4;
+            --radius:    12px;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ── Header ─────────────────────────────────────────── */
+        header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 32px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .logo { font-size: 1.2rem; font-weight: 700; }
+        .logo span { color: var(--accent); }
+        .header-meta {
+            font-size: 0.8rem; color: var(--muted);
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            padding: 5px 14px;
+            border-radius: 20px;
+        }
+
+        /* ── Nav ────────────────────────────────────────────── */
+        nav {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 64px;
+            z-index: 99;
+            height: 49px;
+        }
+        .nav-tabs { display: flex; }
+        .tab-btn {
+            padding: 0 22px;
+            height: 49px;
+            background: none;
+            border: none;
+            color: var(--muted);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            position: relative;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            transition: color 0.2s;
+        }
+        .tab-btn:hover { color: var(--text); }
+        .tab-btn.active { color: var(--accent); }
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 2px;
+            background: var(--accent);
+            border-radius: 2px 2px 0 0;
+        }
+        .nav-right { display: flex; align-items: center; gap: 8px; }
+        .year-label { font-size: 0.8rem; color: var(--muted); }
+        .year-select {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 6px 10px;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            cursor: pointer;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .year-select:focus { border-color: var(--accent); }
+
+        /* ── Main ───────────────────────────────────────────── */
+        main { padding: 28px 32px; max-width: 1600px; margin: 0 auto; }
+    </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────── -->
+<header>
+    <div class="logo">Fin<span>Track</span></div>
+    <div class="header-meta" id="hDate"></div>
+</header>
+
+<!-- ── Nav ─────────────────────────────────────────────────────── -->
+<nav>
+    <div class="nav-tabs">
+        <a class="tab-btn" href="dashboard.html">📊 Dashboard</a>
+        <a class="tab-btn" href="cashflow.html">💸 Cash Flow</a>
+        <a class="tab-btn active" href="networth.html">🏦 Net Worth &amp; Allocation</a>
+    </div>
+    <div class="nav-right">
+        <span class="year-label">Year:</span>
+        <select class="year-select" id="yearSel"></select>
+    </div>
+</nav>
