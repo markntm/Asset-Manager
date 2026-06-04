@@ -409,3 +409,5 @@ async def upsert_networth_cell(body: NetWorthCellIn):
 if __name__ == "__main__":
     print("Link: " + "http://127.0.0.1:8000/")
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
+
