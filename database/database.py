@@ -1,510 +1,620 @@
 """
-database.py — FinTrack SQLite data layer
-Full implementation using Python's built-in sqlite3 module.
+database.py  —  SQLite persistence layer for FinTrack.
+────────────────────────────────────────────────────────
+All I/O is synchronous (stdlib sqlite3).  FastAPI runs sync handlers in a
+thread-pool executor, so the event loop is never blocked.
+
+Each public function opens its own connection, executes inside a single
+transaction, then closes.  This is correct and safe for a single-user app.
+
+Return shapes are designed to feed directly into the calculation functions
+in calculations/cashflow.py and calculations/networth.py without
+any further transformation.
 """
 from __future__ import annotations
+
 import sqlite3
 import uuid
-from typing import Optional
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Optional
 
 DB_PATH = Path(__file__).parent / "fintrack.db"
 
 
-# ═══════════════════════════════════════════════════════════════════
-#  CONNECTION HELPER
-# ═══════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════
+#  CONNECTION
+# ═════════════════════════════════════════════════════════════════════════════
 
-def _conn() -> sqlite3.Connection:
-    """Return a connection with foreign keys enabled and row_factory set."""
-    con = sqlite3.connect(DB_PATH)
-    con.row_factory = sqlite3.Row
-    con.execute("PRAGMA foreign_keys = ON")
-    return con
+@contextmanager
+def _db():
+    """
+    Yield an sqlite3 connection with Row factory enabled.
+    Auto-commits on clean exit; rolls back on any exception.
+    """
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def _uid() -> str:
     return str(uuid.uuid4())
 
 
-# ═══════════════════════════════════════════════════════════════════
-#  INIT — create all tables on first run
-# ═══════════════════════════════════════════════════════════════════
+def _to_values(rows) -> dict:
+    """Convert [(month_idx, value), …] rows → {"0": float, …}."""
+    return {str(r["month_idx"]): float(r["value"]) for r in rows}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  SCHEMA
+# ═════════════════════════════════════════════════════════════════════════════
+
+_SCHEMA = """
+          -- Cash Flow
+          CREATE TABLE IF NOT EXISTS cf_income_categories (
+                                                              id   TEXT PRIMARY KEY,
+                                                              name TEXT NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS cf_income_entries (
+                                                           id          TEXT PRIMARY KEY,
+                                                           category_id TEXT    NOT NULL REFERENCES cf_income_categories(id) ON DELETE CASCADE,
+              year        INTEGER NOT NULL,
+              month_idx   INTEGER NOT NULL,
+              value       REAL    NOT NULL,
+              UNIQUE(category_id, year, month_idx)
+              );
+          CREATE TABLE IF NOT EXISTS cf_expense_categories (
+                                                               id   TEXT PRIMARY KEY,
+                                                               name TEXT NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS cf_expense_subcategories (
+                                                                  id          TEXT PRIMARY KEY,
+                                                                  category_id TEXT NOT NULL REFERENCES cf_expense_categories(id) ON DELETE CASCADE,
+              name        TEXT NOT NULL
+              );
+          CREATE TABLE IF NOT EXISTS cf_expense_entries (
+                                                            id             TEXT PRIMARY KEY,
+                                                            subcategory_id TEXT    NOT NULL REFERENCES cf_expense_subcategories(id) ON DELETE CASCADE,
+              year           INTEGER NOT NULL,
+              month_idx      INTEGER NOT NULL,
+              value          REAL    NOT NULL,
+              UNIQUE(subcategory_id, year, month_idx)
+              );
+          CREATE TABLE IF NOT EXISTS cf_budget_entries (
+                                                           id          TEXT PRIMARY KEY,
+                                                           category_id TEXT    NOT NULL REFERENCES cf_expense_categories(id) ON DELETE CASCADE,
+              year        INTEGER NOT NULL,
+              month_idx   INTEGER NOT NULL,
+              value       REAL    NOT NULL,
+              UNIQUE(category_id, year, month_idx)
+              );
+
+-- Net Worth
+          CREATE TABLE IF NOT EXISTS nw_cash_institutions (
+                                                              id   TEXT PRIMARY KEY,
+                                                              name TEXT NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS nw_cash_accounts (
+                                                          id             TEXT PRIMARY KEY,
+                                                          institution_id TEXT NOT NULL REFERENCES nw_cash_institutions(id) ON DELETE CASCADE,
+              name           TEXT NOT NULL
+              );
+          CREATE TABLE IF NOT EXISTS nw_cash_entries (
+                                                         id         TEXT PRIMARY KEY,
+                                                         account_id TEXT    NOT NULL REFERENCES nw_cash_accounts(id) ON DELETE CASCADE,
+              year       INTEGER NOT NULL,
+              month_idx  INTEGER NOT NULL,
+              value      REAL    NOT NULL,
+              UNIQUE(account_id, year, month_idx)
+              );
+          CREATE TABLE IF NOT EXISTS nw_inv_brokerages (
+                                                           id   TEXT PRIMARY KEY,
+                                                           name TEXT NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS nw_inv_holdings (
+                                                         id           TEXT PRIMARY KEY,
+                                                         brokerage_id TEXT NOT NULL REFERENCES nw_inv_brokerages(id) ON DELETE CASCADE,
+              ticker       TEXT NOT NULL,
+              quantity     REAL NOT NULL DEFAULT 0
+              );
+          CREATE TABLE IF NOT EXISTS nw_inv_entries (
+                                                        id         TEXT PRIMARY KEY,
+                                                        holding_id TEXT    NOT NULL REFERENCES nw_inv_holdings(id) ON DELETE CASCADE,
+              year       INTEGER NOT NULL,
+              month_idx  INTEGER NOT NULL,
+              value      REAL    NOT NULL,
+              UNIQUE(holding_id, year, month_idx)
+              );
+          CREATE TABLE IF NOT EXISTS nw_asset_categories (
+                                                             id   TEXT PRIMARY KEY,
+                                                             name TEXT NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS nw_asset_items (
+                                                        id          TEXT PRIMARY KEY,
+                                                        category_id TEXT NOT NULL REFERENCES nw_asset_categories(id) ON DELETE CASCADE,
+              name        TEXT NOT NULL
+              );
+          CREATE TABLE IF NOT EXISTS nw_asset_entries (
+                                                          id        TEXT PRIMARY KEY,
+                                                          item_id   TEXT    NOT NULL REFERENCES nw_asset_items(id) ON DELETE CASCADE,
+              year      INTEGER NOT NULL,
+              month_idx INTEGER NOT NULL,
+              value     REAL    NOT NULL,
+              UNIQUE(item_id, year, month_idx)
+              );
+
+-- Budget planning targets (single monthly figure per expense category)
+          CREATE TABLE IF NOT EXISTS budget_targets (
+                                                        category_id    TEXT PRIMARY KEY REFERENCES cf_expense_categories(id) ON DELETE CASCADE,
+              monthly_budget REAL
+              ); \
+          """
+
 
 def init_db() -> None:
-    with _conn() as con:
-        con.executescript("""
-                          -- ── Cash Flow ──────────────────────────────────────────
-
-                          CREATE TABLE IF NOT EXISTS cf_income_categories (
-                                                                              id         TEXT PRIMARY KEY,
-                                                                              name       TEXT NOT NULL,
-                                                                              sort_order INTEGER NOT NULL DEFAULT 0
-                          );
-
-                          CREATE TABLE IF NOT EXISTS cf_income_values (
-                                                                          category_id TEXT NOT NULL
-                                                                          REFERENCES cf_income_categories(id) ON DELETE CASCADE,
-                              year        INTEGER NOT NULL,
-                              month_idx   INTEGER NOT NULL CHECK (month_idx BETWEEN 0 AND 11),
-                              value       REAL    NOT NULL,
-                              PRIMARY KEY (category_id, year, month_idx)
-                              );
-
-                          CREATE TABLE IF NOT EXISTS cf_expense_categories (
-                                                                               id         TEXT PRIMARY KEY,
-                                                                               name       TEXT NOT NULL,
-                                                                               type       TEXT NOT NULL
-                                                                               CHECK (type IN ('discretionary', 'fixed', 'one-time')),
-                              sort_order INTEGER NOT NULL DEFAULT 0
-                              );
-
-                          CREATE TABLE IF NOT EXISTS cf_expense_values (
-                                                                           category_id TEXT NOT NULL
-                                                                           REFERENCES cf_expense_categories(id) ON DELETE CASCADE,
-                              year        INTEGER NOT NULL,
-                              month_idx   INTEGER NOT NULL CHECK (month_idx BETWEEN 0 AND 11),
-                              value       REAL    NOT NULL,
-                              PRIMARY KEY (category_id, year, month_idx)
-                              );
-
-                          -- ── Net Worth ───────────────────────────────────────────
-
-                          CREATE TABLE IF NOT EXISTS nw_accounts (
-                                                                     id         TEXT PRIMARY KEY,
-                                                                     name       TEXT NOT NULL,
-                                                                     group_id   TEXT NOT NULL
-                                                                     CHECK (group_id IN ('savings', 'investments', 'assets')),
-                              sort_order INTEGER NOT NULL DEFAULT 0
-                              );
-
-                          CREATE TABLE IF NOT EXISTS nw_values (
-                                                                   account_id TEXT    NOT NULL
-                                                                   REFERENCES nw_accounts(id) ON DELETE CASCADE,
-                              year       INTEGER NOT NULL,
-                              month_idx  INTEGER NOT NULL CHECK (month_idx BETWEEN 0 AND 11),
-                              value      REAL    NOT NULL,
-                              PRIMARY KEY (account_id, year, month_idx)
-                              );
-                          """)
+    """Create all tables.  Safe to call on every startup (IF NOT EXISTS guards)."""
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.executescript(_SCHEMA)   # executescript issues an implicit COMMIT — fine for DDL
+    conn.close()
 
 
-# ═══════════════════════════════════════════════════════════════════
-#  DASHBOARD
-# ═══════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════
+#  CASH FLOW — DATA LOAD
+# ═════════════════════════════════════════════════════════════════════════════
 
-def get_dashboard_summary() -> dict:
-    from datetime import date
-    today     = date.today()
-    year      = today.year
-    month_idx = today.month - 1          # 0-based
+def get_cashflow_data(year: int) -> dict:
+    """
+    Return all income rows and expense categories for one year.
 
-    with _conn() as con:
-
-        # ── Net worth trend (all 12 months of current year) ──────
-        nw_trend: list[Optional[float]] = [None] * 12
-
-        rows = con.execute("""
-                           SELECT month_idx, SUM(value) AS total
-                           FROM   nw_values
-                           WHERE  year = ?
-                           GROUP  BY month_idx
-                           ORDER  BY month_idx
-                           """, (year,)).fetchall()
-
-        for row in rows:
-            nw_trend[row["month_idx"]] = row["total"]
-
-        # Current and previous month net worth
-        nw_current = nw_trend[month_idx] or 0.0
-        nw_prev    = nw_trend[month_idx - 1] if month_idx > 0 else None
-        mom_change = (nw_current - nw_prev) if nw_prev is not None else None
-        mom_pct    = ((mom_change / nw_prev) * 100
-                      if mom_change is not None and nw_prev else None)
-
-        # ── Group totals (allocation) ─────────────────────────────
-        alloc_rows = con.execute("""
-                                 SELECT   a.group_id, SUM(v.value) AS total
-                                 FROM     nw_values v
-                                              JOIN     nw_accounts a ON a.id = v.account_id
-                                 WHERE    v.year = ? AND v.month_idx = ?
-                                 GROUP BY a.group_id
-                                 """, (year, month_idx)).fetchall()
-
-        allocation = {"savings": 0.0, "investments": 0.0, "assets": 0.0}
-        for row in alloc_rows:
-            allocation[row["group_id"]] = row["total"]
-
-        total_cash        = allocation["savings"]
-        total_investments = allocation["investments"]
-
-        # ── Monthly cash flow (current month) ─────────────────────
-        inc_row = con.execute("""
-                              SELECT COALESCE(SUM(value), 0) AS total
-                              FROM   cf_income_values
-                              WHERE  year = ? AND month_idx = ?
-                              """, (year, month_idx)).fetchone()
-
-        exp_row = con.execute("""
-                              SELECT COALESCE(SUM(value), 0) AS total
-                              FROM   cf_expense_values
-                              WHERE  year = ? AND month_idx = ?
-                              """, (year, month_idx)).fetchone()
-
-        monthly_income   = inc_row["total"]
-        monthly_expenses = exp_row["total"]
-        monthly_cashflow = monthly_income - monthly_expenses
-        savings_rate     = ((monthly_cashflow / monthly_income * 100)
-                            if monthly_income > 0 else 0.0)
-
-        # ── Per-account snapshot ──────────────────────────────────
-        acct_rows = con.execute("""
-                                SELECT   a.id, a.name, a.group_id,
-                                         COALESCE(v.value, 0)      AS balance,
-                                         COALESCE(prev.value, 0)   AS prev_balance
-                                FROM     nw_accounts a
-                                             LEFT JOIN nw_values v
-                                                       ON v.account_id = a.id
-                                                           AND v.year       = ?
-                                                           AND v.month_idx  = ?
-                                             LEFT JOIN nw_values prev
-                                                       ON prev.account_id = a.id
-                                                           AND prev.year       = ?
-                                                           AND prev.month_idx  = ?
-                                ORDER BY a.group_id, a.sort_order
-                                """, (year, month_idx, year, month_idx - 1)).fetchall()
-
-        accounts = []
-        for r in acct_rows:
-            pct = (r["balance"] / nw_current * 100) if nw_current else 0.0
-            accounts.append({
-                "name":         r["name"],
-                "institution":  r["name"],      # refine when institution field added
-                "type":         r["group_id"],
-                "balance":      r["balance"],
-                "pct_of_total": round(pct, 2),
-                "mom_change":   r["balance"] - r["prev_balance"],
+    Shape matches calculations/cashflow.py expectations and the frontend
+    STATE object (values dict keyed by string month index).
+    """
+    with _db() as conn:
+        # ── Income ────────────────────────────────────────────────────
+        income_rows: list[dict] = []
+        for cat in conn.execute(
+                "SELECT id, name FROM cf_income_categories"
+        ).fetchall():
+            entries = conn.execute(
+                "SELECT month_idx, value FROM cf_income_entries "
+                "WHERE category_id = ? AND year = ?",
+                (cat["id"], year),
+            ).fetchall()
+            income_rows.append({
+                "id":     cat["id"],
+                "name":   cat["name"],
+                "values": _to_values(entries),
             })
 
-    return {
-        "net_worth":          nw_current,
-        "total_cash":         total_cash,
-        "total_investments":  total_investments,
-        "monthly_cashflow":   monthly_cashflow,
-        "savings_rate":       round(savings_rate, 2),
-        "nw_mom_change":      mom_change,
-        "nw_mom_pct":         round(mom_pct, 2) if mom_pct is not None else None,
-        "net_worth_trend":    nw_trend,
-        "allocation":         allocation,
-        "accounts":           accounts,
-    }
+        # ── Expenses ──────────────────────────────────────────────────
+        expense_cats: list[dict] = []
+        for cat in conn.execute(
+                "SELECT id, name FROM cf_expense_categories"
+        ).fetchall():
+            bud_entries = conn.execute(
+                "SELECT month_idx, value FROM cf_budget_entries "
+                "WHERE category_id = ? AND year = ?",
+                (cat["id"], year),
+            ).fetchall()
+            subcats: list[dict] = []
+            for sc in conn.execute(
+                    "SELECT id, name FROM cf_expense_subcategories WHERE category_id = ?",
+                    (cat["id"],),
+            ).fetchall():
+                sc_entries = conn.execute(
+                    "SELECT month_idx, value FROM cf_expense_entries "
+                    "WHERE subcategory_id = ? AND year = ?",
+                    (sc["id"], year),
+                ).fetchall()
+                subcats.append({
+                    "id":     sc["id"],
+                    "name":   sc["name"],
+                    "values": _to_values(sc_entries),
+                })
+            expense_cats.append({
+                "id":            cat["id"],
+                "name":          cat["name"],
+                "budget":        _to_values(bud_entries),
+                "subcategories": subcats,
+            })
+
+        return {"income": income_rows, "expenses": expense_cats}
 
 
-# ═══════════════════════════════════════════════════════════════════
-#  CASH FLOW
-# ═══════════════════════════════════════════════════════════════════
+# ═════════════════════════════════════════════════════════════════════════════
+#  CASH FLOW — CRUD
+# ═════════════════════════════════════════════════════════════════════════════
 
-def get_cashflow_year(year: int) -> dict:
-    with _conn() as con:
-
-        # Income categories
-        inc_cats = con.execute("""
-                               SELECT id, name FROM cf_income_categories ORDER BY sort_order, name
-                               """).fetchall()
-
-        # Income values for this year
-        inc_vals = con.execute("""
-                               SELECT category_id, month_idx, value
-                               FROM   cf_income_values
-                               WHERE  year = ?
-                               """, (year,)).fetchall()
-
-        inc_map: dict[str, dict] = {r["id"]: {} for r in inc_cats}
-        for v in inc_vals:
-            inc_map[v["category_id"]][str(v["month_idx"])] = v["value"]
-
-        income = [
-            {"id": r["id"], "name": r["name"], "values": inc_map[r["id"]]}
-            for r in inc_cats
-        ]
-
-        # Expense categories
-        exp_cats = con.execute("""
-                               SELECT id, name, type FROM cf_expense_categories ORDER BY sort_order, name
-                               """).fetchall()
-
-        exp_vals = con.execute("""
-                               SELECT category_id, month_idx, value
-                               FROM   cf_expense_values
-                               WHERE  year = ?
-                               """, (year,)).fetchall()
-
-        exp_map: dict[str, dict] = {r["id"]: {} for r in exp_cats}
-        for v in exp_vals:
-            exp_map[v["category_id"]][str(v["month_idx"])] = v["value"]
-
-        expenses = [
-            {
-                "id":     r["id"],
-                "name":   r["name"],
-                "type":   r["type"],
-                "values": exp_map[r["id"]],
-            }
-            for r in exp_cats
-        ]
-
-    return {"year": year, "income": income, "expenses": expenses}
-
-
-def create_income_category(name: str) -> dict:
+def add_income_category(name: str) -> dict:
     new_id = _uid()
-    with _conn() as con:
-        order = con.execute(
-            "SELECT COALESCE(MAX(sort_order)+1, 0) FROM cf_income_categories"
-        ).fetchone()[0]
-        con.execute(
-            "INSERT INTO cf_income_categories (id, name, sort_order) VALUES (?,?,?)",
-            (new_id, name, order),
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO cf_income_categories (id, name) VALUES (?, ?)", (new_id, name)
         )
     return {"id": new_id, "name": name}
 
 
-def update_income_category(category_id: str, name: str) -> dict | None:
-    with _conn() as con:
-        cur = con.execute(
-            "UPDATE cf_income_categories SET name=? WHERE id=?", (name, category_id)
-        )
-        if cur.rowcount == 0:
-            return None
-    return {"id": category_id, "name": name}
+def delete_income_category(category_id: str) -> None:
+    with _db() as conn:
+        conn.execute("DELETE FROM cf_income_categories WHERE id = ?", (category_id,))
 
 
-def delete_income_category(category_id: str) -> bool:
-    with _conn() as con:
-        cur = con.execute(
-            "DELETE FROM cf_income_categories WHERE id=?", (category_id,)
-        )
-    return cur.rowcount > 0
-
-
-def create_expense_category(name: str, type_: str) -> dict:
+def add_expense_category(name: str) -> dict:
     new_id = _uid()
-    with _conn() as con:
-        order = con.execute(
-            "SELECT COALESCE(MAX(sort_order)+1, 0) FROM cf_expense_categories"
-        ).fetchone()[0]
-        con.execute(
-            "INSERT INTO cf_expense_categories (id, name, type, sort_order) VALUES (?,?,?,?)",
-            (new_id, name, type_, order),
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO cf_expense_categories (id, name) VALUES (?, ?)", (new_id, name)
         )
-    return {"id": new_id, "name": name, "type": type_}
+    return {"id": new_id, "name": name}
 
 
-def update_expense_category(
-        category_id: str,
-        name: Optional[str],
-        type_: Optional[str],
-) -> dict | None:
-    with _conn() as con:
-        row = con.execute(
-            "SELECT id, name, type FROM cf_expense_categories WHERE id=?",
-            (category_id,)
-        ).fetchone()
-        if not row:
-            return None
-        new_name = name  if name  is not None else row["name"]
-        new_type = type_ if type_ is not None else row["type"]
-        con.execute(
-            "UPDATE cf_expense_categories SET name=?, type=? WHERE id=?",
-            (new_name, new_type, category_id),
+def delete_expense_category(category_id: str) -> None:
+    with _db() as conn:
+        conn.execute("DELETE FROM cf_expense_categories WHERE id = ?", (category_id,))
+
+
+def add_expense_subcategory(category_id: str, name: str) -> dict:
+    new_id = _uid()
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO cf_expense_subcategories (id, category_id, name) VALUES (?, ?, ?)",
+            (new_id, category_id, name),
         )
-    return {"id": category_id, "name": new_name, "type": new_type}
+    return {"id": new_id, "name": name}
 
 
-def delete_expense_category(category_id: str) -> bool:
-    with _conn() as con:
-        cur = con.execute(
-            "DELETE FROM cf_expense_categories WHERE id=?", (category_id,)
-        )
-    return cur.rowcount > 0
+def delete_expense_subcategory(subcategory_id: str) -> None:
+    with _db() as conn:
+        conn.execute("DELETE FROM cf_expense_subcategories WHERE id = ?", (subcategory_id,))
 
 
-def upsert_cashflow_cell(
-        table:     str,
-        row_id:    str,
-        year:      int,
-        month_idx: int,
-        value:     Optional[float],
+# ═════════════════════════════════════════════════════════════════════════════
+#  CASH FLOW — UPSERTS
+# ═════════════════════════════════════════════════════════════════════════════
+
+def upsert_income_entry(
+        category_id: str, year: int, month_idx: int, value: Optional[float]
 ) -> None:
-    tbl_values = (
-        "cf_income_values"  if table == "income" else "cf_expense_values"
-    )
-    tbl_col = (
-        "category_id"
-    )
-    with _conn() as con:
+    with _db() as conn:
         if value is None:
-            con.execute(
-                f"DELETE FROM {tbl_values} WHERE category_id=? AND year=? AND month_idx=?",
-                (row_id, year, month_idx),
+            conn.execute(
+                "DELETE FROM cf_income_entries "
+                "WHERE category_id = ? AND year = ? AND month_idx = ?",
+                (category_id, year, month_idx),
             )
         else:
-            con.execute(
-                f"""INSERT INTO {tbl_values} (category_id, year, month_idx, value)
-                    VALUES (?,?,?,?)
-                    ON CONFLICT(category_id, year, month_idx)
-                    DO UPDATE SET value=excluded.value""",
-                (row_id, year, month_idx, value),
+            conn.execute(
+                "INSERT INTO cf_income_entries (id, category_id, year, month_idx, value) "
+                "VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(category_id, year, month_idx) DO UPDATE SET value = excluded.value",
+                (_uid(), category_id, year, month_idx, value),
             )
 
 
-# ═══════════════════════════════════════════════════════════════════
-#  NET WORTH
-# ═══════════════════════════════════════════════════════════════════
-
-def get_accounts_structure() -> dict:
-    with _conn() as con:
-        rows = con.execute("""
-                           SELECT id, name, group_id
-                           FROM   nw_accounts
-                           ORDER  BY group_id, sort_order, name
-                           """).fetchall()
-
-    structure: dict[str, list] = {"savings": [], "investments": [], "assets": []}
-    for r in rows:
-        structure[r["group_id"]].append({
-            "id":       r["id"],
-            "name":     r["name"],
-            "group_id": r["group_id"],
-        })
-    return structure
+def upsert_expense_entry(
+        subcategory_id: str, year: int, month_idx: int, value: Optional[float]
+) -> None:
+    with _db() as conn:
+        if value is None:
+            conn.execute(
+                "DELETE FROM cf_expense_entries "
+                "WHERE subcategory_id = ? AND year = ? AND month_idx = ?",
+                (subcategory_id, year, month_idx),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO cf_expense_entries (id, subcategory_id, year, month_idx, value) "
+                "VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(subcategory_id, year, month_idx) DO UPDATE SET value = excluded.value",
+                (_uid(), subcategory_id, year, month_idx, value),
+            )
 
 
-def get_networth_year(year: int) -> dict:
-    with _conn() as con:
-        acct_rows = con.execute("""
-                                SELECT id, name, group_id
-                                FROM   nw_accounts
-                                ORDER  BY group_id, sort_order, name
-                                """).fetchall()
-
-        val_rows = con.execute("""
-                               SELECT account_id, month_idx, value
-                               FROM   nw_values
-                               WHERE  year = ?
-                               """, (year,)).fetchall()
-
-    val_map: dict[str, dict] = {r["id"]: {} for r in acct_rows}
-    for v in val_rows:
-        val_map[v["account_id"]][str(v["month_idx"])] = v["value"]
-
-    structure: dict[str, list] = {"savings": [], "investments": [], "assets": []}
-    rows_out  = []
-
-    for r in acct_rows:
-        acct = {"id": r["id"], "name": r["name"], "group_id": r["group_id"]}
-        structure[r["group_id"]].append(acct)
-        rows_out.append({
-            "id":       r["id"],
-            "name":     r["name"],
-            "group_id": r["group_id"],
-            "values":   val_map[r["id"]],
-        })
-
-    return {"year": year, "accounts": structure, "rows": rows_out}
+def upsert_budget_entry(
+        category_id: str, year: int, month_idx: int, value: Optional[float]
+) -> None:
+    with _db() as conn:
+        if value is None:
+            conn.execute(
+                "DELETE FROM cf_budget_entries "
+                "WHERE category_id = ? AND year = ? AND month_idx = ?",
+                (category_id, year, month_idx),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO cf_budget_entries (id, category_id, year, month_idx, value) "
+                "VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(category_id, year, month_idx) DO UPDATE SET value = excluded.value",
+                (_uid(), category_id, year, month_idx, value),
+            )
 
 
-def create_account(group_id: str, name: str) -> dict:
+# ═════════════════════════════════════════════════════════════════════════════
+#  NET WORTH — DATA LOAD
+# ═════════════════════════════════════════════════════════════════════════════
+
+def get_networth_data(year: int) -> dict:
+    """
+    Return cash / investments / assets for one year.
+
+    Shape matches calculations/networth.py expectations and the frontend
+    STATE object.
+    """
+    with _db() as conn:
+        # ── Cash ──────────────────────────────────────────────────────
+        cash_list: list[dict] = []
+        for inst in conn.execute(
+                "SELECT id, name FROM nw_cash_institutions"
+        ).fetchall():
+            accounts: list[dict] = []
+            for acc in conn.execute(
+                    "SELECT id, name FROM nw_cash_accounts WHERE institution_id = ?",
+                    (inst["id"],),
+            ).fetchall():
+                entries = conn.execute(
+                    "SELECT month_idx, value FROM nw_cash_entries "
+                    "WHERE account_id = ? AND year = ?",
+                    (acc["id"], year),
+                ).fetchall()
+                accounts.append({
+                    "id":     acc["id"],
+                    "name":   acc["name"],
+                    "values": _to_values(entries),
+                })
+            cash_list.append({
+                "id":       inst["id"],
+                "name":     inst["name"],
+                "accounts": accounts,
+            })
+
+        # ── Investments ───────────────────────────────────────────────
+        inv_list: list[dict] = []
+        for brk in conn.execute(
+                "SELECT id, name FROM nw_inv_brokerages"
+        ).fetchall():
+            holdings: list[dict] = []
+            for h in conn.execute(
+                    "SELECT id, ticker, quantity FROM nw_inv_holdings WHERE brokerage_id = ?",
+                    (brk["id"],),
+            ).fetchall():
+                entries = conn.execute(
+                    "SELECT month_idx, value FROM nw_inv_entries "
+                    "WHERE holding_id = ? AND year = ?",
+                    (h["id"], year),
+                ).fetchall()
+                holdings.append({
+                    "id":       h["id"],
+                    "ticker":   h["ticker"],
+                    "quantity": float(h["quantity"]),
+                    "values":   _to_values(entries),
+                })
+            inv_list.append({
+                "id":       brk["id"],
+                "name":     brk["name"],
+                "holdings": holdings,
+            })
+
+        # ── Assets ────────────────────────────────────────────────────
+        ast_list: list[dict] = []
+        for cat in conn.execute(
+                "SELECT id, name FROM nw_asset_categories"
+        ).fetchall():
+            items: list[dict] = []
+            for item in conn.execute(
+                    "SELECT id, name FROM nw_asset_items WHERE category_id = ?",
+                    (cat["id"],),
+            ).fetchall():
+                entries = conn.execute(
+                    "SELECT month_idx, value FROM nw_asset_entries "
+                    "WHERE item_id = ? AND year = ?",
+                    (item["id"], year),
+                ).fetchall()
+                items.append({
+                    "id":     item["id"],
+                    "name":   item["name"],
+                    "values": _to_values(entries),
+                })
+            ast_list.append({
+                "id":    cat["id"],
+                "name":  cat["name"],
+                "items": items,
+            })
+
+        return {"cash": cash_list, "investments": inv_list, "assets": ast_list}
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  NET WORTH — CRUD
+# ═════════════════════════════════════════════════════════════════════════════
+
+def add_cash_institution(name: str) -> dict:
     new_id = _uid()
-    with _conn() as con:
-        order = con.execute(
-            "SELECT COALESCE(MAX(sort_order)+1, 0) FROM nw_accounts WHERE group_id=?",
-            (group_id,)
-        ).fetchone()[0]
-        con.execute(
-            "INSERT INTO nw_accounts (id, name, group_id, sort_order) VALUES (?,?,?,?)",
-            (new_id, name, group_id, order),
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO nw_cash_institutions (id, name) VALUES (?, ?)", (new_id, name)
         )
-    return {"id": new_id, "name": name, "group_id": group_id}
+    return {"id": new_id, "name": name}
 
 
-def update_account(account_id: str, name: str) -> dict | None:
-    with _conn() as con:
-        row = con.execute(
-            "SELECT group_id FROM nw_accounts WHERE id=?", (account_id,)
-        ).fetchone()
-        if not row:
-            return None
-        con.execute(
-            "UPDATE nw_accounts SET name=? WHERE id=?", (name, account_id)
+def add_cash_account(institution_id: str, name: str) -> dict:
+    new_id = _uid()
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO nw_cash_accounts (id, institution_id, name) VALUES (?, ?, ?)",
+            (new_id, institution_id, name),
         )
-    return {"id": account_id, "name": name, "group_id": row["group_id"]}
+    return {"id": new_id, "name": name}
 
 
-def delete_account(account_id: str) -> bool:
-    with _conn() as con:
-        cur = con.execute(
-            "DELETE FROM nw_accounts WHERE id=?", (account_id,)
+def delete_cash_institution(institution_id: str) -> None:
+    with _db() as conn:
+        conn.execute("DELETE FROM nw_cash_institutions WHERE id = ?", (institution_id,))
+
+
+def delete_cash_account(account_id: str) -> None:
+    with _db() as conn:
+        conn.execute("DELETE FROM nw_cash_accounts WHERE id = ?", (account_id,))
+
+
+def add_brokerage(name: str) -> dict:
+    new_id = _uid()
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO nw_inv_brokerages (id, name) VALUES (?, ?)", (new_id, name)
         )
-    return cur.rowcount > 0
+    return {"id": new_id, "name": name}
+
+
+def add_holding(brokerage_id: str, ticker: str, quantity: float) -> dict:
+    new_id = _uid()
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO nw_inv_holdings (id, brokerage_id, ticker, quantity) "
+            "VALUES (?, ?, ?, ?)",
+            (new_id, brokerage_id, ticker, quantity),
+        )
+    return {"id": new_id, "ticker": ticker, "quantity": quantity}
+
+
+def update_holding_quantity(holding_id: str, quantity: float) -> None:
+    with _db() as conn:
+        conn.execute(
+            "UPDATE nw_inv_holdings SET quantity = ? WHERE id = ?", (quantity, holding_id)
+        )
+
+
+def delete_brokerage(brokerage_id: str) -> None:
+    with _db() as conn:
+        conn.execute("DELETE FROM nw_inv_brokerages WHERE id = ?", (brokerage_id,))
+
+
+def delete_holding(holding_id: str) -> None:
+    with _db() as conn:
+        conn.execute("DELETE FROM nw_inv_holdings WHERE id = ?", (holding_id,))
+
+
+def add_asset_category(name: str) -> dict:
+    new_id = _uid()
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO nw_asset_categories (id, name) VALUES (?, ?)", (new_id, name)
+        )
+    return {"id": new_id, "name": name}
+
+
+def add_asset_item(category_id: str, name: str) -> dict:
+    new_id = _uid()
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO nw_asset_items (id, category_id, name) VALUES (?, ?, ?)",
+            (new_id, category_id, name),
+        )
+    return {"id": new_id, "name": name}
+
+
+def delete_asset_category(category_id: str) -> None:
+    with _db() as conn:
+        conn.execute("DELETE FROM nw_asset_categories WHERE id = ?", (category_id,))
+
+
+def delete_asset_item(item_id: str) -> None:
+    with _db() as conn:
+        conn.execute("DELETE FROM nw_asset_items WHERE id = ?", (item_id,))
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  NET WORTH — CELL UPSERT
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _resolve_item_type(conn, item_id: str) -> tuple[str, str]:
+    """
+    Identify which entry table an item_id belongs to.
+
+    Returns (table_name, foreign_key_column).
+    Raises ValueError when item_id is not found in any leaf table.
+    """
+    checks = [
+        ("nw_cash_accounts", "nw_cash_entries",  "account_id"),
+        ("nw_inv_holdings",  "nw_inv_entries",   "holding_id"),
+        ("nw_asset_items",   "nw_asset_entries",  "item_id"),
+    ]
+    for owner_table, entry_table, fk_col in checks:
+        if conn.execute(
+                f"SELECT 1 FROM {owner_table} WHERE id = ?", (item_id,)
+        ).fetchone():
+            return entry_table, fk_col
+    raise ValueError(f"No networth leaf item found with id={item_id!r}")
 
 
 def upsert_networth_cell(
-        item_id:   str,
-        year:      int,
-        month_idx: int,
-        value:     Optional[float],
+        item_id: str, year: int, month_idx: int, value: Optional[float]
 ) -> None:
-    with _conn() as con:
+    """
+    Save (or clear) one monthly value cell.  Works for cash accounts,
+    investment holdings, and asset items with a single unified call.
+    Raises ValueError if item_id doesn't exist.
+    """
+    with _db() as conn:
+        table, fk_col = _resolve_item_type(conn, item_id)
         if value is None:
-            con.execute(
-                "DELETE FROM nw_values WHERE account_id=? AND year=? AND month_idx=?",
+            conn.execute(
+                f"DELETE FROM {table} WHERE {fk_col} = ? AND year = ? AND month_idx = ?",
                 (item_id, year, month_idx),
             )
         else:
-            con.execute(
-                """INSERT INTO nw_values (account_id, year, month_idx, value)
-                   VALUES (?,?,?,?)
-                       ON CONFLICT(account_id, year, month_idx)
-                   DO UPDATE SET value=excluded.value""",
-                (item_id, year, month_idx, value),
+            conn.execute(
+                f"INSERT INTO {table} (id, {fk_col}, year, month_idx, value) "
+                f"VALUES (?, ?, ?, ?, ?) "
+                f"ON CONFLICT({fk_col}, year, month_idx) DO UPDATE SET value = excluded.value",
+                (_uid(), item_id, year, month_idx, value),
             )
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+#  BUDGET TARGETS
+# ═════════════════════════════════════════════════════════════════════════════
+
+def get_budget_categories() -> list[dict]:
+    """
+    All expense categories joined with their planning budget target.
+    Categories without a target row have monthly_budget = None.
+    """
+    with _db() as conn:
+        rows = conn.execute("""
+                            SELECT   c.id, c.name, t.monthly_budget
+                            FROM     cf_expense_categories c
+                                         LEFT JOIN budget_targets t ON t.category_id = c.id
+                            ORDER BY c.rowid
+                            """).fetchall()
+        return [
+            {
+                "id":             r["id"],
+                "name":           r["name"],
+                "monthly_budget": r["monthly_budget"],
+            }
+            for r in rows
+        ]
 
 
-
-
-# ── Year load ───────────────────────────────────────────────────────────────
-def get_cashflow_year(year: int) -> dict: ...
-    # Returns CashFlowYearOut-shaped dict:
-    # { "year": int, "income": [income_rows], "expenses": [expense_cats] }
-
-# ── Income ──────────────────────────────────────────────────────────────────
-def income_category_exists(category_id: str) -> bool: ...
-def create_income_category(name: str) -> dict: ...          # {id, name}
-def update_income_category(category_id: str, name: str) -> Optional[dict]: ...
-def delete_income_category(category_id: str) -> bool: ...
-def upsert_income_entry(
-        category_id: str, year: int, month_idx: int, value: Optional[float]
-) -> None: ...
-
-# ── Expense categories ───────────────────────────────────────────────────────
-def expense_category_exists(category_id: str) -> bool: ...
-def create_expense_category(name: str) -> dict: ...         # {id, name, subcategories:[]}
-def update_expense_category(category_id: str, name: str) -> Optional[dict]: ...
-def delete_expense_category(category_id: str) -> bool: ...  # cascades to subcategories + values
-
-# ── Expense subcategories ────────────────────────────────────────────────────
-def expense_subcategory_exists(subcategory_id: str) -> bool: ...
-def create_expense_subcategory(category_id: str, name: str) -> dict: ...  # {id, name, category_id}
-def update_expense_subcategory(subcategory_id: str, name: str) -> Optional[dict]: ...
-def delete_expense_subcategory(subcategory_id: str) -> bool: ...
-
-# ── Cell saves ───────────────────────────────────────────────────────────────
-def upsert_expense_entry(
-        subcategory_id: str, year: int, month_idx: int, value: Optional[float]
-) -> None: ...
-def upsert_budget_entry(
-        category_id: str, year: int, month_idx: int, value: Optional[float]
-) -> None: ...
+def upsert_budget_target(category_id: str, monthly_budget: Optional[float]) -> None:
+    with _db() as conn:
+        if monthly_budget is None:
+            conn.execute(
+                "DELETE FROM budget_targets WHERE category_id = ?", (category_id,)
+            )
+        else:
+            conn.execute(
+                "INSERT INTO budget_targets (category_id, monthly_budget) VALUES (?, ?) "
+                "ON CONFLICT(category_id) DO UPDATE SET monthly_budget = excluded.monthly_budget",
+                (category_id, monthly_budget),
+            )

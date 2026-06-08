@@ -1,595 +1,81 @@
 """
-main.py — FinTrack FastAPI Application
-Handles page serving, all API routes, and Pydantic I/O models.
-Database operations are delegated to database.py (implemented next step).
+main.py  —  FinTrack FastAPI application.
+
+Run with:
+    uvicorn main:app --reload --port 8000
+
+HTML pages are served from ./static/.  The four existing pages
+(dashboard, cashflow, networth, budget) must be placed there as:
+    static/dashboard.html
+    static/cashflow.html
+    static/networth.html
+    static/budget.html
+
+Any page file that doesn't exist yet returns a simple placeholder.
 """
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
-from typing import Dict, List, Optional
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.responses import FileResponse, HTMLResponse
+
 import uvicorn
-import os
+import database.database as database
+from routers import cashflow, networth, budget, dashboard
 
-import database.database       as db
-import calculations.cashflow   as cf_calc
+STATIC_DIR = Path(__file__).parent / "templates"
 
-# ═══════════════════════════════════════════════════════════════════
-#  APP SETUP
-# ═══════════════════════════════════════════════════════════════════
+_PLACEHOLDER = (
+    "<!doctype html><html><body style='font-family:sans-serif;padding:40px'>"
+    "<h2>⛅ Coming soon</h2><p><a href='/'>← Dashboard</a></p></body></html>"
+)
+
+
+# ── Startup / shutdown ────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialise SQLite tables on first run."""
-    db.init_db()
+    database.init_db()
     yield
 
-app = FastAPI(
-    title       = "FinTrack API",
-    version     = "2.0.0",
-    description = "Personal finance tracker — cash flow, net worth, and allocation",
-    lifespan    = lifespan,
-)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins     = ["*"],
-    allow_credentials = True,
-    allow_methods     = ["*"],
-    allow_headers     = ["*"],
-)
+app = FastAPI(title="FinTrack", version="1.0", lifespan=lifespan)
 
-TEMPLATES = os.path.join(os.path.dirname(__file__), "templates")
 
+# ── Page routes ───────────────────────────────────────────────────────────────
 
-# ═══════════════════════════════════════════════════════════════════
-#  PYDANTIC MODELS
-# ═══════════════════════════════════════════════════════════════════
+def _page(filename: str) -> FileResponse | HTMLResponse:
+    path = STATIC_DIR / filename
+    return FileResponse(path) if path.exists() else HTMLResponse(_PLACEHOLDER)
 
-# ── Shared ──────────────────────────────────────────────────────────
 
-class OkResponse(BaseModel):
-    ok:      bool = True
-    message: str  = "success"
+@app.get("/",         include_in_schema=False)
+def page_dashboard(): return _page("dashboard.html")
 
+@app.get("/cashflow", include_in_schema=False)
+def page_cashflow():  return _page("cashflow.html")
 
-# ────────────────────────────────────────────────────────────────────
-#  CASH FLOW
-# ────────────────────────────────────────────────────────────────────
+@app.get("/networth", include_in_schema=False)
+def page_networth():  return _page("networth.html")
 
-# ·· Request bodies ··················································
+@app.get("/budget",   include_in_schema=False)
+def page_budget():    return _page("budget.html")
 
-class IncomeCategoryIn(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100,
-                      examples=["HII Mission Tech", "UH LLM Research", "Relatives"])
+@app.get("/forecast", include_in_schema=False)
+def page_forecast():  return _page("forecast.html")
 
-class IncomeCategoryUpdateIn(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
+@app.get("/chatbot",  include_in_schema=False)
+def page_chatbot():   return _page("chatbot.html")
 
-class IncomeCellIn(BaseModel):
-    year:      int             = Field(..., ge=2000, le=2100)
-    month_idx: int             = Field(..., ge=0,    le=11,
-                                       description="0 = Jan, 11 = Dec")
-    value:     Optional[float] = Field(None, description="null clears the cell")
 
-class ExpenseCategoryIn(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100,
-                      examples=["Fixed", "Groceries", "Transportation"])
+# ── API routers ───────────────────────────────────────────────────────────────
 
-class ExpenseCategoryUpdateIn(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-
-class ExpenseSubcategoryIn(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100,
-                      examples=["Rent", "Costco", "Netflix", "Gas"])
-
-class ExpenseSubcategoryUpdateIn(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-
-class ExpenseCellIn(BaseModel):
-    year:      int             = Field(..., ge=2000, le=2100)
-    month_idx: int             = Field(..., ge=0,    le=11)
-    value:     Optional[float] = Field(None, description="null clears the cell")
-
-class BudgetCellIn(BaseModel):
-    year:      int             = Field(..., ge=2000, le=2100)
-    month_idx: int             = Field(..., ge=0,    le=11)
-    value:     Optional[float] = Field(None, description="null clears the cell")
-
-
-# ·· CRUD response bodies ············································
-#  These are returned by create / update / delete endpoints where only
-#  the affected record's structure needs to be confirmed, not recomputed
-#  month totals.
-
-class IncomeCategoryOut(BaseModel):
-    id:   str
-    name: str
-
-class ExpenseSubcategoryOut(BaseModel):
-    id:          str
-    name:        str
-    category_id: str
-
-class ExpenseCategoryOut(BaseModel):
-    id:            str
-    name:          str
-    subcategories: List[ExpenseSubcategoryOut] = []
-
-
-# ·· Year-load response bodies ·······································
-#  Returned by GET /api/cashflow/data/{year} on page load / year switch.
-#  Contains every stored value; the frontend populates inputs from these.
-
-class IncomeCategoryRowOut(BaseModel):
-    id:     str
-    name:   str
-    values: Dict[str, float] = {}   # {"0": 5000.0, "3": 4800.0, …}
-
-class ExpenseSubcategoryRowOut(BaseModel):
-    id:     str
-    name:   str
-    values: Dict[str, float] = {}
-
-class ExpenseCategoryRowOut(BaseModel):
-    id:            str
-    name:          str
-    budget:        Dict[str, float] = {}
-    subcategories: List[ExpenseSubcategoryRowOut] = []
-
-class CashFlowYearOut(BaseModel):
-    year:     int
-    income:   List[IncomeCategoryRowOut]
-    expenses: List[ExpenseCategoryRowOut]
-
-
-# ·· Pattern A response bodies ·······································
-#  Returned by cell-save (PUT) endpoints so the frontend can update every
-#  visible number with authoritative server-computed values.
-
-class IncomeCatSummaryOut(BaseModel):
-    id:    str
-    value: float
-    delta: Optional[float] = None
-
-class ExpenseSubSummaryOut(BaseModel):
-    id:    str
-    value: float
-    delta: Optional[float] = None
-
-class ExpenseCatSummaryOut(BaseModel):
-    id:            str
-    total:         float
-    budget:        float
-    delta:         Optional[float]             = None
-    subcategories: List[ExpenseSubSummaryOut]  = []
-
-class MonthSummaryOut(BaseModel):
-    """
-    Full computed state for one month.
-    Canonical Pattern A response for income-entry and expense-entry PUTs.
-    Field names mirror the keys returned by cf_calc.compute_month_summary().
-    """
-    month_idx:          int
-    income_total:       float
-    income_delta:       Optional[float]             = None
-    expense_total:      float
-    expense_delta:      Optional[float]             = None
-    budget_total:       float
-    net_cash_flow:      float
-    savings_rate:       Optional[float]             = None
-    income_categories:  List[IncomeCatSummaryOut]  = []
-    expense_categories: List[ExpenseCatSummaryOut] = []
-
-class BudgetUpdateOut(BaseModel):
-    """
-    Lightweight Pattern A response for budget-cell saves.
-    Budget changes only affect the budget display row, so we return just
-    the two values that need updating rather than the full MonthSummaryOut.
-    """
-    ok:              bool  = True
-    category_budget: float
-    budget_total:    float
-
-
-# ────────────────────────────────────────────────────────────────────
-#  NET WORTH  (unchanged — refactor deferred to next sprint)
-# ────────────────────────────────────────────────────────────────────
-
-class AccountIn(BaseModel):
-    group_id: str = Field(..., pattern="^(savings|investments|assets)$")
-    name:     str = Field(..., min_length=1, max_length=100)
-
-class AccountUpdateIn(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-
-class NetWorthCellIn(BaseModel):
-    item_id:   str
-    year:      int             = Field(..., ge=2000, le=2100)
-    month_idx: int             = Field(..., ge=0,    le=11)
-    value:     Optional[float] = Field(None)
-
-class AccountOut(BaseModel):
-    id:       str
-    name:     str
-    group_id: str
-
-class AccountsStructureOut(BaseModel):
-    savings:     List[AccountOut]
-    investments: List[AccountOut]
-    assets:      List[AccountOut]
-
-class NetWorthRowOut(BaseModel):
-    id:       str
-    name:     str
-    group_id: str
-    values:   Dict[str, float] = {}
-
-class NetWorthYearOut(BaseModel):
-    year:     int
-    accounts: AccountsStructureOut
-    rows:     List[NetWorthRowOut]
-
-
-# ────────────────────────────────────────────────────────────────────
-#  DASHBOARD  (unchanged)
-# ────────────────────────────────────────────────────────────────────
-
-class AccountSnapshotOut(BaseModel):
-    name:         str
-    institution:  str
-    type:         str
-    balance:      float
-    pct_of_total: float
-    mom_change:   Optional[float] = None
-
-class DashboardSummaryOut(BaseModel):
-    net_worth:         float
-    total_cash:        float
-    total_investments: float
-    monthly_cashflow:  float
-    savings_rate:      float
-    nw_mom_change:     Optional[float]       = None
-    nw_mom_pct:        Optional[float]       = None
-    net_worth_trend:   List[Optional[float]]
-    allocation:        Dict[str, float]
-    accounts:          List[AccountSnapshotOut]
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  HTML PAGE ROUTES
-# ═══════════════════════════════════════════════════════════════════
-
-@app.get("/",         response_class=FileResponse, include_in_schema=False)
-async def page_dashboard(): return FileResponse(os.path.join(TEMPLATES, "dashboard.html"))
-
-@app.get("/cashflow", response_class=FileResponse, include_in_schema=False)
-async def page_cashflow():  return FileResponse(os.path.join(TEMPLATES, "cashflow.html"))
-
-@app.get("/networth", response_class=FileResponse, include_in_schema=False)
-async def page_networth():  return FileResponse(os.path.join(TEMPLATES, "networth.html"))
-
-@app.get("/budget",   response_class=FileResponse, include_in_schema=False)
-async def page_budget():    return FileResponse(os.path.join(TEMPLATES, "budget.html"))
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  DASHBOARD  /api/dashboard
-# ═══════════════════════════════════════════════════════════════════
-
-@app.get(
-    "/api/dashboard/summary",
-    response_model = DashboardSummaryOut,
-    tags           = ["Dashboard"],
-    summary        = "Aggregated snapshot for the dashboard page",
-)
-async def get_dashboard_summary():
-    return db.get_dashboard_summary()
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  CASH FLOW  /api/cashflow
-# ═══════════════════════════════════════════════════════════════════
-
-# ── Year data load ────────────────────────────────────────────────────
-
-@app.get(
-    "/api/cashflow/data/{year}",
-    response_model = CashFlowYearOut,
-    tags           = ["Cash Flow"],
-    summary        = "Full income + expense tree with all stored monthly values",
-)
-async def get_cashflow_year(year: int):
-    """
-    Called once on page load and again on year-selector change.
-    Returns the full category / subcategory tree plus every stored value
-    for that year so the frontend can populate all input fields.
-    """
-    return db.get_cashflow_year(year)
-
-
-# ── Income categories  ────────────────────────────────────────────────
-
-@app.post(
-    "/api/cashflow/income/categories",
-    response_model = IncomeCategoryOut,
-    status_code    = status.HTTP_201_CREATED,
-    tags           = ["Cash Flow"],
-    summary        = "Create a new income category",
-)
-async def create_income_category(body: IncomeCategoryIn):
-    return db.create_income_category(body.name)
-
-
-@app.put(
-    "/api/cashflow/income/categories/{category_id}",
-    response_model = IncomeCategoryOut,
-    tags           = ["Cash Flow"],
-    summary        = "Rename an income category",
-)
-async def update_income_category(category_id: str, body: IncomeCategoryUpdateIn):
-    result = db.update_income_category(category_id, body.name)
-    if not result:
-        raise HTTPException(status_code=404, detail="Income category not found")
-    return result
-
-
-@app.delete(
-    "/api/cashflow/income/categories/{category_id}",
-    response_model = OkResponse,
-    tags           = ["Cash Flow"],
-    summary        = "Delete an income category and all its stored values",
-)
-async def delete_income_category(category_id: str):
-    if not db.delete_income_category(category_id):
-        raise HTTPException(status_code=404, detail="Income category not found")
-    return OkResponse(message=f"Income category {category_id} deleted")
-
-
-# ── Income cell save — Pattern A ──────────────────────────────────────
-
-@app.put(
-    "/api/cashflow/income/{category_id}/entry",
-    response_model = MonthSummaryOut,
-    tags           = ["Cash Flow"],
-    summary        = "Upsert one income cell; returns full computed month summary",
-)
-async def upsert_income_entry(category_id: str, body: IncomeCellIn):
-    """
-    Pattern A.  Persists the new cell value, reloads the year's data,
-    runs cf_calc.compute_month_summary(), and returns the result.
-    The frontend applies these values directly — no local arithmetic needed.
-    """
-    if not db.income_category_exists(category_id):
-        raise HTTPException(status_code=404, detail="Income category not found")
-
-    db.upsert_income_entry(category_id, body.year, body.month_idx, body.value)
-
-    year_data = db.get_cashflow_year(body.year)
-    return cf_calc.compute_month_summary(
-        year_data["income"],
-        year_data["expenses"],
-        body.month_idx,
-    )
-
-
-# ── Expense categories ────────────────────────────────────────────────
-
-@app.post(
-    "/api/cashflow/expense/categories",
-    response_model = ExpenseCategoryOut,
-    status_code    = status.HTTP_201_CREATED,
-    tags           = ["Cash Flow"],
-    summary        = "Create a new top-level expense category",
-)
-async def create_expense_category(body: ExpenseCategoryIn):
-    return db.create_expense_category(body.name)
-
-
-@app.put(
-    "/api/cashflow/expense/categories/{category_id}",
-    response_model = ExpenseCategoryOut,
-    tags           = ["Cash Flow"],
-    summary        = "Rename an expense category",
-)
-async def update_expense_category(category_id: str, body: ExpenseCategoryUpdateIn):
-    result = db.update_expense_category(category_id, body.name)
-    if not result:
-        raise HTTPException(status_code=404, detail="Expense category not found")
-    return result
-
-
-@app.delete(
-    "/api/cashflow/expense/categories/{category_id}",
-    response_model = OkResponse,
-    tags           = ["Cash Flow"],
-    summary        = "Delete a category, all its subcategories, and all stored values",
-)
-async def delete_expense_category(category_id: str):
-    if not db.delete_expense_category(category_id):
-        raise HTTPException(status_code=404, detail="Expense category not found")
-    return OkResponse(message=f"Expense category {category_id} deleted")
-
-
-# ── Expense subcategories ─────────────────────────────────────────────
-
-@app.post(
-    "/api/cashflow/expense/categories/{category_id}/subcategories",
-    response_model = ExpenseSubcategoryOut,
-    status_code    = status.HTTP_201_CREATED,
-    tags           = ["Cash Flow"],
-    summary        = "Add a subcategory under an existing expense category",
-)
-async def create_expense_subcategory(category_id: str, body: ExpenseSubcategoryIn):
-    if not db.expense_category_exists(category_id):
-        raise HTTPException(status_code=404, detail="Expense category not found")
-    return db.create_expense_subcategory(category_id, body.name)
-
-
-@app.put(
-    "/api/cashflow/expense/subcategories/{subcategory_id}",
-    response_model = ExpenseSubcategoryOut,
-    tags           = ["Cash Flow"],
-    summary        = "Rename an expense subcategory",
-)
-async def update_expense_subcategory(
-        subcategory_id: str, body: ExpenseSubcategoryUpdateIn
-):
-    result = db.update_expense_subcategory(subcategory_id, body.name)
-    if not result:
-        raise HTTPException(status_code=404, detail="Expense subcategory not found")
-    return result
-
-
-@app.delete(
-    "/api/cashflow/expense/subcategories/{subcategory_id}",
-    response_model = OkResponse,
-    tags           = ["Cash Flow"],
-    summary        = "Delete a subcategory and all its stored values",
-)
-async def delete_expense_subcategory(subcategory_id: str):
-    if not db.delete_expense_subcategory(subcategory_id):
-        raise HTTPException(status_code=404, detail="Expense subcategory not found")
-    return OkResponse(message=f"Expense subcategory {subcategory_id} deleted")
-
-
-# ── Expense cell save — Pattern A ─────────────────────────────────────
-
-@app.put(
-    "/api/cashflow/expense/subcategory/{subcategory_id}/entry",
-    response_model = MonthSummaryOut,
-    tags           = ["Cash Flow"],
-    summary        = "Upsert one expense cell; returns full computed month summary",
-)
-async def upsert_expense_entry(subcategory_id: str, body: ExpenseCellIn):
-    """
-    Pattern A.  Persists the subcategory cell value, reloads the year's
-    data, and returns the full month summary so the frontend can update
-    category totals, expense block totals, and summary cards in one shot.
-    """
-    if not db.expense_subcategory_exists(subcategory_id):
-        raise HTTPException(status_code=404, detail="Expense subcategory not found")
-
-    db.upsert_expense_entry(subcategory_id, body.year, body.month_idx, body.value)
-
-    year_data = db.get_cashflow_year(body.year)
-    return cf_calc.compute_month_summary(
-        year_data["income"],
-        year_data["expenses"],
-        body.month_idx,
-    )
-
-
-# ── Budget cell save — Pattern A (lightweight) ────────────────────────
-
-@app.put(
-    "/api/cashflow/expense/category/{category_id}/budget",
-    response_model = BudgetUpdateOut,
-    tags           = ["Cash Flow"],
-    summary        = "Upsert a monthly budget for an expense category",
-)
-async def upsert_budget_entry(category_id: str, body: BudgetCellIn):
-    """
-    Pattern A — lightweight variant.  Budget changes affect only the
-    budget display row, so we return BudgetUpdateOut (two values) rather
-    than the full MonthSummaryOut, keeping the response minimal.
-    """
-    if not db.expense_category_exists(category_id):
-        raise HTTPException(status_code=404, detail="Expense category not found")
-
-    db.upsert_budget_entry(category_id, body.year, body.month_idx, body.value)
-
-    year_data    = db.get_cashflow_year(body.year)
-    cat          = next(
-        (c for c in year_data["expenses"] if c["id"] == category_id), None
-    )
-    cat_budget   = cf_calc.budget_category_value(cat, body.month_idx) if cat else 0.0
-    budget_total = cf_calc.budget_month_total(year_data["expenses"], body.month_idx)
-
-    return BudgetUpdateOut(category_budget=cat_budget, budget_total=budget_total)
-
-
-# ═══════════════════════════════════════════════════════════════════
-#  NET WORTH  /api/networth  (unchanged — refactor in next sprint)
-# ═══════════════════════════════════════════════════════════════════
-
-@app.get(
-    "/api/networth/accounts",
-    response_model = AccountsStructureOut,
-    tags           = ["Net Worth"],
-    summary        = "Account structure grouped by savings / investments / assets",
-)
-async def get_accounts_structure():
-    return db.get_accounts_structure()
-
-
-@app.get(
-    "/api/networth/data/{year}",
-    response_model = NetWorthYearOut,
-    tags           = ["Net Worth"],
-    summary        = "Account structure + all balance values for a given year",
-)
-async def get_networth_year(year: int):
-    return db.get_networth_year(year)
-
-
-@app.post(
-    "/api/networth/accounts",
-    response_model = AccountOut,
-    status_code    = status.HTTP_201_CREATED,
-    tags           = ["Net Worth"],
-    summary        = "Add a new account to a group",
-)
-async def create_account(body: AccountIn):
-    return db.create_account(body.group_id, body.name)
-
-
-@app.put(
-    "/api/networth/accounts/{account_id}",
-    response_model = AccountOut,
-    tags           = ["Net Worth"],
-    summary        = "Rename an account",
-)
-async def update_account(account_id: str, body: AccountUpdateIn):
-    result = db.update_account(account_id, body.name)
-    if not result:
-        raise HTTPException(status_code=404, detail="Account not found")
-    return result
-
-
-@app.delete(
-    "/api/networth/accounts/{account_id}",
-    response_model = OkResponse,
-    tags           = ["Net Worth"],
-    summary        = "Delete an account and all its values across all years",
-)
-async def delete_account(account_id: str):
-    if not db.delete_account(account_id):
-        raise HTTPException(status_code=404, detail="Account not found")
-    return OkResponse(message=f"Account {account_id} deleted")
-
-
-@app.put(
-    "/api/networth/cells",
-    response_model = OkResponse,
-    tags           = ["Net Worth"],
-    summary        = "Upsert a single net worth balance cell",
-)
-async def upsert_networth_cell(body: NetWorthCellIn):
-    db.upsert_networth_cell(
-        item_id   = body.item_id,
-        year      = body.year,
-        month_idx = body.month_idx,
-        value     = body.value,
-    )
-    return OkResponse()
-
-# ═══════════════════════════════════════════════════════════════════
-#  ENTRY POINT
-# ═══════════════════════════════════════════════════════════════════
+app.include_router(dashboard.router, prefix="/api/dashboard")
+app.include_router(cashflow.router,  prefix="/api/cashflow")
+app.include_router(networth.router,  prefix="/api/networth")
+app.include_router(budget.router,    prefix="/api/budget")
 
 if __name__ == "__main__":
     print("Link: " + "http://127.0.0.1:8000/")
