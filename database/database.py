@@ -3,7 +3,6 @@ database.py — FinTrack SQLite data layer
 Full implementation using Python's built-in sqlite3 module.
 """
 from __future__ import annotations
-
 import sqlite3
 import uuid
 from typing import Optional
@@ -470,3 +469,42 @@ def upsert_networth_cell(
                    DO UPDATE SET value=excluded.value""",
                 (item_id, year, month_idx, value),
             )
+
+
+
+
+
+
+# ── Year load ───────────────────────────────────────────────────────────────
+def get_cashflow_year(year: int) -> dict: ...
+    # Returns CashFlowYearOut-shaped dict:
+    # { "year": int, "income": [income_rows], "expenses": [expense_cats] }
+
+# ── Income ──────────────────────────────────────────────────────────────────
+def income_category_exists(category_id: str) -> bool: ...
+def create_income_category(name: str) -> dict: ...          # {id, name}
+def update_income_category(category_id: str, name: str) -> Optional[dict]: ...
+def delete_income_category(category_id: str) -> bool: ...
+def upsert_income_entry(
+        category_id: str, year: int, month_idx: int, value: Optional[float]
+) -> None: ...
+
+# ── Expense categories ───────────────────────────────────────────────────────
+def expense_category_exists(category_id: str) -> bool: ...
+def create_expense_category(name: str) -> dict: ...         # {id, name, subcategories:[]}
+def update_expense_category(category_id: str, name: str) -> Optional[dict]: ...
+def delete_expense_category(category_id: str) -> bool: ...  # cascades to subcategories + values
+
+# ── Expense subcategories ────────────────────────────────────────────────────
+def expense_subcategory_exists(subcategory_id: str) -> bool: ...
+def create_expense_subcategory(category_id: str, name: str) -> dict: ...  # {id, name, category_id}
+def update_expense_subcategory(subcategory_id: str, name: str) -> Optional[dict]: ...
+def delete_expense_subcategory(subcategory_id: str) -> bool: ...
+
+# ── Cell saves ───────────────────────────────────────────────────────────────
+def upsert_expense_entry(
+        subcategory_id: str, year: int, month_idx: int, value: Optional[float]
+) -> None: ...
+def upsert_budget_entry(
+        category_id: str, year: int, month_idx: int, value: Optional[float]
+) -> None: ...

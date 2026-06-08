@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>FinTrack — Budgeting</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:        #0f1117;
+            --surface:   #1a1d27;
+            --surface-2: #222536;
+            --border:    #2e3249;
+            --accent:    #6c63ff;
+            --green:     #4ade80;
+            --red:       #f87171;
+            --amber:     #f59e0b;
+            --blue:      #60a5fa;
+            --text:      #e2e8f0;
+            --muted:     #8892a4;
+            --radius:    12px;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg); color: var(--text); min-height: 100vh;
+        }
+
+        /* ── Header ──────────────────────────────────────────────── */
+        header {
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            padding: 0 32px; height: 64px;
+            display: flex; align-items: center; justify-content: space-between;
+            position: sticky; top: 0; z-index: 100;
+        }
+        .logo { font-size: 1.2rem; font-weight: 700; }
+        .logo span { color: var(--accent); }
+        .header-date {
+            font-size: 0.8rem; color: var(--muted);
+            background: var(--surface-2); border: 1px solid var(--border);
+            padding: 5px 14px; border-radius: 20px;
+        }
+
+        /* ── Main Nav ────────────────────────────────────────────── */
+        .main-nav {
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            padding: 0 32px; display: flex; align-items: stretch;
+            position: sticky; top: 64px; z-index: 99; height: 49px;
+        }
+        .nav-tab {
+            padding: 0 20px; height: 49px; background: none; border: none;
+            color: var(--muted); font-size: 0.875rem; font-weight: 500;
+            cursor: pointer; position: relative; text-decoration: none;
+            display: inline-flex; align-items: center; transition: color 0.2s;
+            white-space: nowrap;
+        }
+        .nav-tab:hover { color: var(--text); }
+        .nav-tab.active { color: var(--accent); }
+        .nav-tab.active::after {
+            content: ''; position: absolute;
+            bottom: 0; left: 0; right: 0; height: 2px;
+            background: var(--accent); border-radius: 2px 2px 0 0;
+        }
+
+        /* ── Main ────────────────────────────────────────────────── */
+        main { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
+
+        /* ── Summary Cards ───────────────────────────────────────── */
+        .cards-row {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 14px; margin-bottom: 20px;
+        }
+        @media (max-width: 860px) { .cards-row { grid-template-columns: repeat(2, 1fr); } }
+
+        .sum-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 18px 20px;
+            transition: border-color 0.2s, transform 0.15s;
+        }
+        .sum-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+        .sc-label {
+            font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--muted); margin-bottom: 10px;
+        }
+        .sc-value { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 8px; }
+        .sc-sub   { font-size: 0.75rem; color: var(--muted); min-height: 1.2em; }
+
+        /* ── Block (accordion) ───────────────────────────────────── */
+        .cf-block {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); margin-bottom: 14px; overflow: hidden;
+        }
+        .block-header {
+            display: flex; align-items: center;
+            padding: 16px 20px; gap: 14px;
+            cursor: pointer; user-select: none; transition: background 0.15s;
+        }
+        .block-header:hover { background: rgba(255,255,255,0.018); }
+        .chevron {
+            font-size: 0.6rem; color: var(--muted); width: 14px;
+            text-align: center; transition: transform 0.22s; flex-shrink: 0;
+        }
+        .block-title {
+            font-size: 0.9rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.08em; flex: 1; color: var(--accent);
+        }
+        .block-stats { display: flex; gap: 10px; align-items: stretch; }
+        .stat-box {
+            background: var(--surface-2); border: 1px solid var(--border);
+            border-radius: 9px; padding: 7px 15px;
+            display: flex; flex-direction: column; justify-content: center;
+            text-align: right; min-width: 120px;
+        }
+        .stat-lbl {
+            font-size: 0.58rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.07em; color: var(--muted); margin-bottom: 4px; white-space: nowrap;
+        }
+        .stat-val { font-size: 0.92rem; font-weight: 700; white-space: nowrap; }
+
+        .block-body { border-top: 1px solid var(--border); }
+
+        /* ── Column headers ──────────────────────────────────────── */
+        .col-headers {
+            display: grid;
+            grid-template-columns: 28px 1fr 178px 22px 152px 68px;
+            align-items: center; gap: 16px;
+            padding: 8px 20px;
+            background: rgba(0,0,0,0.18);
+            border-bottom: 1px solid var(--border);
+        }
+        .ch {
+            font-size: 0.6rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.07em; color: var(--muted); white-space: nowrap;
+        }
+        .ch-r { text-align: right; }
+        .ch-c { text-align: center; }
+
+        /* ── Budget rows ─────────────────────────────────────────── */
+        .budget-row {
+            display: grid;
+            grid-template-columns: 28px 1fr 178px 22px 152px 68px;
+            align-items: center; gap: 16px;
+            padding: 13px 20px;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.12s;
+        }
+        .budget-row:last-of-type { border-bottom: none; }
+        .budget-row:hover { background: rgba(255,255,255,0.018); }
+
+        .cat-index {
+            font-size: 0.72rem; font-weight: 600; color: var(--muted);
+            text-align: right; line-height: 1;
+        }
+        .cat-name {
+            font-size: 0.92rem; font-weight: 600; color: var(--text);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+
+        /* Monthly input */
+        .monthly-wrap {
+            display: flex; align-items: center; gap: 7px; justify-content: flex-end;
+        }
+        .monthly-prefix {
+            font-size: 0.75rem; color: var(--muted); white-space: nowrap; flex-shrink: 0;
+        }
+        .amount-input {
+            background: var(--surface-2); border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text); font-size: 0.875rem;
+            font-family: inherit; padding: 8px 11px; text-align: right;
+            width: 136px; flex-shrink: 0; outline: none; transition: border-color 0.2s;
+            -moz-appearance: textfield;
+        }
+        .amount-input::-webkit-inner-spin-button,
+        .amount-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+        .amount-input:focus { border-color: var(--accent); }
+        .amount-input:hover:not(:focus) {
+            border-color: color-mix(in srgb, var(--border) 60%, var(--accent) 40%);
+        }
+
+        /* Arrow */
+        .row-arrow {
+            font-size: 0.8rem; color: var(--muted);
+            text-align: center; user-select: none;
+        }
+
+        /* Annual display box */
+        .annual-box {
+            background: var(--surface-2); border: 1px solid var(--border);
+            border-radius: 9px; padding: 7px 13px;
+            display: flex; flex-direction: column; justify-content: center;
+            text-align: right;
+        }
+        .annual-lbl {
+            font-size: 0.55rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.07em; color: var(--muted); margin-bottom: 3px; white-space: nowrap;
+        }
+        .annual-val {
+            font-size: 0.92rem; font-weight: 700; color: var(--accent); white-space: nowrap;
+        }
+        .annual-val.unset { color: var(--muted); }
+
+        /* Status pill */
+        .status-pill {
+            font-size: 0.63rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.05em; padding: 4px 0; border-radius: 20px;
+            text-align: center; white-space: nowrap;
+        }
+        .pill-set {
+            background: rgba(74,222,128,0.1); color: var(--green);
+            border: 1px solid rgba(74,222,128,0.25);
+        }
+        .pill-unset {
+            background: rgba(136,146,164,0.08); color: var(--muted);
+            border: 1px solid rgba(136,146,164,0.2);
+        }
+
+        /* Empty / source note */
+        .empty-msg {
+            padding: 32px 20px; color: var(--muted);
+            font-size: 0.85rem; font-style: italic; text-align: center;
+        }
+        .empty-msg a { color: var(--accent); text-decoration: none; }
+        .empty-msg a:hover { text-decoration: underline; }
+
+        .source-note {
+            font-size: 0.75rem; color: var(--muted);
+            padding: 11px 20px;
+            background: rgba(0,0,0,0.12);
+            border-top: 1px solid var(--border);
+            display: flex; align-items: center; gap: 6px;
+        }
+        .source-note a { color: var(--accent); text-decoration: none; }
+        .source-note a:hover { text-decoration: underline; }
+
+        /* Color helpers */
+        .clr-accent { color: var(--accent); }
+        .clr-green  { color: var(--green);  }
+        .clr-amber  { color: var(--amber);  }
+    </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────── -->
+<header>
+    <div class="logo">Fin<span>Track</span></div>
+    <div class="header-date" id="hDate"></div>
+</header>
+
+<!-- ── Main Nav ────────────────────────────────────────────────── -->
+<nav class="main-nav">
+    <a class="nav-tab"        href="/">📊 Dashboard</a>
+    <a class="nav-tab"        href="/cashflow">💸 Cash Flow</a>
+    <a class="nav-tab"        href="/networth">🏦 Net Worth</a>
+    <a class="nav-tab active" href="/budget">📋 Budgeting &amp; Planning</a>
+    <a class="nav-tab"        href="/forecast">⛅ Forecasting</a>
+    <a class="nav-tab"        href="/chatbot">🤖 Chatbot</a>
+</nav>
+
+<main>
+    <div id="cardsEl"></div>
+    <div id="blockEl"></div>
+</main>
+
+<script>
+    // ════════════════════════════════════════════════════════════════
+    //  STATE
+    //  categories: [{ id, name, monthly_budget: number|null }]
+    //  Categories are sourced from cashflow expense categories
+    //  (top-level only — no subcategories).
+    // ════════════════════════════════════════════════════════════════
+    let STATE = { categories: [] };
+
+    // ════════════════════════════════════════════════════════════════
+    //  HELPERS
+    // ════════════════════════════════════════════════════════════════
+    const fmtAmt = n => {
+        if (n == null || isNaN(n)) return '$0';
+        return (n < 0 ? '−$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US');
+    };
+    const esc     = s => String(s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const setTxt  = (id, t) => { const e = document.getElementById(id); if (e) e.textContent = t; };
+    const setHtml = (id, h) => { const e = document.getElementById(id); if (e) e.innerHTML  = h; };
+
+    // ════════════════════════════════════════════════════════════════
+    //  CALCULATIONS
+    // ════════════════════════════════════════════════════════════════
+    const monthlyTotal  = () => STATE.categories.reduce((s, c) => s + (c.monthly_budget || 0), 0);
+    const annualTotal   = () => monthlyTotal() * 12;
+    const setBudgetCt   = () => STATE.categories.filter(c => c.monthly_budget > 0).length;
+    const unsetBudgetCt = () => STATE.categories.filter(c => !(c.monthly_budget > 0)).length;
+    const avgMonthly    = () => {
+        const sc = setBudgetCt();
+        return sc > 0 ? monthlyTotal() / sc : null;
+    };
+
+    // ════════════════════════════════════════════════════════════════
+    //  API STUBS
+    //  GET  /api/budget/categories
+    //       → { categories: [{ id, name, monthly_budget }] }
+    //       Sourced server-side from cashflow expense categories.
+    //
+    //  PUT  /api/budget/category/:id
+    //       body: { monthly_budget: number|null }
+    // ════════════════════════════════════════════════════════════════
+    async function apiFetch(path, opts = {}) {
+        try {
+            const r = await fetch(path, {
+                headers: { 'Content-Type': 'application/json' }, ...opts,
+            });
+            if (!r.ok) return null;
+            return r.json();
+        } catch (e) { console.warn('API stub:', e.message); return null; }
+    }
+
+    async function apiLoad() {
+        const data = await apiFetch('/api/budget/categories');
+        if (!data) return;
+        STATE.categories = (data.categories || []).map(c => ({
+            id:             c.id,
+            name:           c.name,
+            monthly_budget: c.monthly_budget ?? null,
+        }));
+    }
+
+    const apiSave = (catId, val) => apiFetch(
+        `/api/budget/category/${catId}`,
+        { method: 'PUT', body: JSON.stringify({ monthly_budget: val === '' ? null : +val }) }
+    );
+
+    // ════════════════════════════════════════════════════════════════
+    //  INPUT HANDLERS
+    //  oninput → optimistic local update (no re-render)
+    //  onblur  → fire-and-forget API sync
+    // ════════════════════════════════════════════════════════════════
+    function onInput(catId, val) {
+        const cat = STATE.categories.find(c => c.id === catId);
+        if (!cat) return;
+        const v = parseFloat(val);
+        cat.monthly_budget = (isNaN(v) || val.trim() === '') ? null : v;
+
+        // ── Update this row ──────────────────────────────────────────
+        const annual = cat.monthly_budget != null ? cat.monthly_budget * 12 : null;
+        const isSet  = cat.monthly_budget != null && cat.monthly_budget > 0;
+
+        const annualEl = document.getElementById(`annual-${catId}`);
+        const pillEl   = document.getElementById(`pill-${catId}`);
+
+        if (annualEl) {
+            annualEl.textContent = annual != null ? fmtAmt(annual) + ' /yr' : '—';
+            annualEl.className   = 'annual-val' + (annual == null ? ' unset' : '');
+        }
+        if (pillEl) {
+            pillEl.textContent = isSet ? 'Set' : 'Unset';
+            pillEl.className   = 'status-pill ' + (isSet ? 'pill-set' : 'pill-unset');
+        }
+
+        // ── Update summary cards ─────────────────────────────────────
+        const mt = monthlyTotal(), at = annualTotal();
+        const sc = setBudgetCt(),  uc = unsetBudgetCt();
+        const avg = avgMonthly();
+
+        setTxt('card-monthly', fmtAmt(mt));
+        setTxt('card-annual',  fmtAmt(at));
+        setTxt('card-set',     `${sc} / ${STATE.categories.length}`);
+
+        const unsetEl = document.getElementById('card-unset');
+        if (unsetEl) {
+            unsetEl.textContent  = uc > 0 ? String(uc) : 'All set ✓';
+            unsetEl.style.color  = uc > 0 ? 'var(--amber)' : 'var(--green)';
+        }
+        setTxt('card-sub-unset', uc > 0 ? 'categories still need a budget' : 'every category is budgeted');
+
+        // ── Update block header stats ────────────────────────────────
+        setTxt('blk-monthly', fmtAmt(mt));
+        setTxt('blk-annual',  fmtAmt(at));
+    }
+
+    function onBlur(catId, val) { apiSave(catId, val); }
+
+    // ════════════════════════════════════════════════════════════════
+    //  HTML BUILDERS
+    // ════════════════════════════════════════════════════════════════
+    function buildCards() {
+        const mt = monthlyTotal(), at = annualTotal();
+        const sc = setBudgetCt(),  uc = unsetBudgetCt();
+        return `
+<div class="cards-row">
+    <div class="sum-card">
+        <div class="sc-label">💰 Total Monthly Budget</div>
+        <div class="sc-value clr-accent" id="card-monthly">${fmtAmt(mt)}</div>
+        <div class="sc-sub">across all categories</div>
+    </div>
+    <div class="sum-card">
+        <div class="sc-label">📅 Total Annual Budget</div>
+        <div class="sc-value clr-green" id="card-annual">${fmtAmt(at)}</div>
+        <div class="sc-sub">monthly × 12</div>
+    </div>
+    <div class="sum-card">
+        <div class="sc-label">📋 Categories Budgeted</div>
+        <div class="sc-value" id="card-set">${sc} / ${STATE.categories.length}</div>
+        <div class="sc-sub">of all expense categories</div>
+    </div>
+    <div class="sum-card">
+        <div class="sc-label">⚠️ Unbudgeted</div>
+        <div class="sc-value" id="card-unset"
+             style="color:${uc > 0 ? 'var(--amber)' : 'var(--green)'}">
+            ${uc > 0 ? String(uc) : 'All set ✓'}
+        </div>
+        <div class="sc-sub" id="card-sub-unset">
+            ${uc > 0 ? 'categories still need a budget' : 'every category is budgeted'}
+        </div>
+    </div>
+</div>`;
+    }
+
+    function buildRow(cat, idx) {
+        const mb     = cat.monthly_budget;
+        const annual = mb != null ? mb * 12 : null;
+        const valStr = mb != null ? mb : '';
+        const isSet  = mb != null && mb > 0;
+        return `
+<div class="budget-row">
+    <span class="cat-index">${idx + 1}</span>
+    <span class="cat-name">${esc(cat.name)}</span>
+    <div class="monthly-wrap">
+        <span class="monthly-prefix">/mo</span>
+        <input type="number" class="amount-input" placeholder="—" value="${valStr}"
+            oninput="onInput('${cat.id}', this.value)"
+            onblur="onBlur('${cat.id}', this.value)"/>
+    </div>
+    <span class="row-arrow">→</span>
+    <div class="annual-box">
+        <div class="annual-lbl">Annual (×12)</div>
+        <div class="annual-val${annual == null ? ' unset' : ''}" id="annual-${cat.id}">
+            ${annual != null ? fmtAmt(annual) + ' /yr' : '—'}
+        </div>
+    </div>
+    <span class="status-pill ${isSet ? 'pill-set' : 'pill-unset'}" id="pill-${cat.id}">
+        ${isSet ? 'Set' : 'Unset'}
+    </span>
+</div>`;
+    }
+
+    function buildBlock() {
+        const mt = monthlyTotal(), at = annualTotal();
+        const rows = STATE.categories.length > 0
+            ? STATE.categories.map((c, i) => buildRow(c, i)).join('')
+            : `<div class="empty-msg">
+                   No expense categories found — add categories on the
+                   <a href="/cashflow">Cash Flow</a> page first.
+               </div>`;
+        return `
+<div class="cf-block">
+    <div class="block-header" onclick="toggleBlock()">
+        <span class="chevron" id="chv-block">▼</span>
+        <span class="block-title">Monthly Budget Targets</span>
+        <div class="block-stats">
+            <div class="stat-box">
+                <div class="stat-lbl">Monthly Total</div>
+                <div class="stat-val clr-accent" id="blk-monthly">${fmtAmt(mt)}</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-lbl">Annual Total</div>
+                <div class="stat-val clr-green" id="blk-annual">${fmtAmt(at)}</div>
+            </div>
+        </div>
+    </div>
+    <div class="block-body" id="block-body">
+        <div class="col-headers">
+            <span class="ch">#</span>
+            <span class="ch">Category</span>
+            <span class="ch ch-r">Monthly Budget</span>
+            <span class="ch"></span>
+            <span class="ch ch-r">Annual Target</span>
+            <span class="ch ch-c">Status</span>
+        </div>
+        ${rows}
+        <div class="source-note">
+            💡 Categories are managed from the <a href="/cashflow">Cash Flow</a> page.
+        </div>
+    </div>
+</div>`;
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  ACCORDION
+    // ════════════════════════════════════════════════════════════════
+    function toggleBlock() {
+        const body = document.getElementById('block-body');
+        const chv  = document.getElementById('chv-block');
+        if (!body) return;
+        const open = body.style.display !== 'none';
+        body.style.display = open ? 'none' : '';
+        if (chv) chv.style.transform = open ? 'rotate(-90deg)' : '';
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  RENDER
+    // ════════════════════════════════════════════════════════════════
+    function render() {
+        setHtml('cardsEl', buildCards());
+        setHtml('blockEl', buildBlock());
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  INIT
+    // ════════════════════════════════════════════════════════════════
+    (async function init() {
+        document.getElementById('hDate').textContent =
+            new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        await apiLoad();
+        render();
+    })();
+</script>
+</body>
+</html>
