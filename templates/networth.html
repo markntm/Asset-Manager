@@ -28,7 +28,6 @@
             background: var(--bg); color: var(--text); min-height: 100vh;
         }
 
-        /* ── Header ──────────────────────────────────────────────── */
         header {
             background: var(--surface); border-bottom: 1px solid var(--border);
             padding: 0 32px; height: 64px;
@@ -43,7 +42,6 @@
             padding: 5px 14px; border-radius: 20px;
         }
 
-        /* ── Main Nav ────────────────────────────────────────────── */
         .main-nav {
             background: var(--surface); border-bottom: 1px solid var(--border);
             padding: 0 32px; display: flex; align-items: stretch;
@@ -64,7 +62,6 @@
             background: var(--accent); border-radius: 2px 2px 0 0;
         }
 
-        /* ── Sub Nav ─────────────────────────────────────────────── */
         .sub-nav {
             background: var(--surface); border-bottom: 1px solid var(--border);
             padding: 0 32px; display: flex; align-items: stretch;
@@ -120,11 +117,9 @@
             background: var(--accent); border-radius: 2px 2px 0 0;
         }
 
-        /* ── Main ────────────────────────────────────────────────── */
         main { padding: 24px 32px; max-width: 1400px; margin: 0 auto; }
         .view.hidden { display: none; }
 
-        /* ── Summary Cards ───────────────────────────────────────── */
         .cards-row {
             display: grid; grid-template-columns: repeat(4,1fr);
             gap: 14px; margin-bottom: 20px;
@@ -155,7 +150,6 @@
         .badge.dn  { background: rgba(248,113,113,0.12); color: var(--red);  }
         .badge.nil { background: rgba(136,146,164,0.12); color: var(--muted);}
 
-        /* ── CF Blocks (accordion) ───────────────────────────────── */
         .cf-block {
             background: var(--surface); border: 1px solid var(--border);
             border-radius: var(--radius); margin-bottom: 14px; overflow: hidden;
@@ -194,7 +188,6 @@
 
         .block-body { border-top: 1px solid var(--border); }
 
-        /* ── Institution / Brokerage / Category rows ─────────────── */
         .inst-block { border-bottom: 1px solid var(--border); }
         .inst-block:last-of-type { border-bottom: none; }
 
@@ -226,7 +219,6 @@
 
         .inst-body { background: rgba(0,0,0,0.1); border-top: 1px solid var(--border); }
 
-        /* ── Leaf rows (account / holding / item) ────────────────── */
         .leaf-row {
             display: flex; align-items: center;
             padding: 9px 20px 9px 44px; gap: 14px;
@@ -240,7 +232,6 @@
             min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
 
-        /* Investment holding metadata */
         .holding-meta {
             flex: 1; display: flex; align-items: center;
             gap: 8px; min-width: 0; overflow: hidden;
@@ -317,7 +308,6 @@
             font-size: 0.82rem; font-style: italic;
         }
 
-        /* ── Net Worth Total Bar ─────────────────────────────────── */
         .nw-total-bar {
             background: var(--surface-2); border: 2px solid var(--accent);
             border-radius: var(--radius); padding: 16px 20px;
@@ -339,11 +329,28 @@
         .chart-panel:last-child { margin-bottom: 0; }
         .cp-head {
             display: flex; align-items: center; justify-content: space-between;
-            margin-bottom: 14px;
+            margin-bottom: 14px; gap: 12px;
         }
         .cp-title { font-size: 0.875rem; font-weight: 600; }
         .cp-sub   { font-size: 0.78rem; color: var(--muted); }
+        .cp-head-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
         .chart-wrap { height: 280px; position: relative; }
+
+        /* ── Detail view toggle pills ────────────────────────────── */
+        .detail-pills { display: flex; gap: 3px; }
+        .detail-pill {
+            padding: 2px 10px; border-radius: 20px;
+            border: 1px solid var(--border); background: none;
+            color: var(--muted); font-size: 0.72rem; font-weight: 600;
+            cursor: pointer; transition: all 0.15s; font-family: inherit;
+            white-space: nowrap;
+        }
+        .detail-pill.active {
+            background: var(--accent); border-color: var(--accent); color: #fff;
+        }
+        .detail-pill:not(.active):hover {
+            border-color: var(--accent); color: var(--accent);
+        }
 
         /* ── Delta helpers ───────────────────────────────────────── */
         .dlt-up  { color: var(--green); }
@@ -403,13 +410,11 @@
 </head>
 <body>
 
-<!-- ── Header ──────────────────────────────────────────────────── -->
 <header>
     <div class="logo">Fin<span>Track</span></div>
     <div class="header-date" id="hDate"></div>
 </header>
 
-<!-- ── Main Nav ────────────────────────────────────────────────── -->
 <nav class="main-nav">
     <a class="nav-tab"        href="/">📊 Dashboard</a>
     <a class="nav-tab"        href="/cashflow">💸 Cash Flow</a>
@@ -419,7 +424,6 @@
     <a class="nav-tab"        href="/chatbot">🤖 Chatbot</a>
 </nav>
 
-<!-- ── Sub Nav ─────────────────────────────────────────────────── -->
 <div class="sub-nav">
     <div class="year-section">
         <button class="year-view-btn active" id="yearViewBtn">—</button>
@@ -454,7 +458,13 @@
         <div class="chart-panel">
             <div class="cp-head">
                 <span class="cp-title">Allocation</span>
-                <span class="cp-sub" id="pieSub">—</span>
+                <div class="cp-head-right">
+                    <span class="cp-sub" id="pieSub">—</span>
+                    <div class="detail-pills" id="pieToggle">
+                        <button class="detail-pill active" onclick="setPieMode(false)">Groups</button>
+                        <button class="detail-pill"        onclick="setPieMode(true)">Detailed</button>
+                    </div>
+                </div>
             </div>
             <div class="chart-wrap"><canvas id="pieChart"></canvas></div>
         </div>
@@ -480,7 +490,6 @@
             <label id="modalLbl">Name</label>
             <input type="text" id="mName" placeholder=""/>
         </div>
-        <!-- Quantity field: visible only for investment holdings -->
         <div class="field" id="modalQtyField" style="display:none">
             <label>Quantity (shares / units)</label>
             <input type="number" id="mQty" placeholder="e.g. 3.5" step="0.01" min="0"/>
@@ -499,17 +508,22 @@
     const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun',
         'Jul','Aug','Sep','Oct','Nov','Dec'];
 
+    // Summary mode: 3 group colours
     const PIE_COLORS = ['#60a5fa','#4ade80','#f59e0b'];
 
-    const MODAL_META = {
-        'cash-inst':    { title:'Add Institution',    sub:'Appears across all years.',  lbl:'Institution name  (e.g. Capital One, Chase, Wells Fargo)' },
-        'cash-acc':     { title:'Add Account',         sub:'Under selected institution.', lbl:'Account name  (e.g. Checking, HYSA, Savings)' },
-        'inv-brk':      { title:'Add Brokerage',       sub:'Appears across all years.',  lbl:'Brokerage name  (e.g. Schwab, Fidelity, Robinhood)' },
-        'inv-hold':     { title:'Add Holding',         sub:'Under selected brokerage.',  lbl:'Ticker / Name  (e.g. VOO, AAPL, BTC, QQQ)' },
-        'ast-cat':      { title:'Add Asset Category',  sub:'Appears across all years.',  lbl:'Category name  (e.g. Real Estate, Vehicle, Business)' },
-        'ast-item':     { title:'Add Asset',           sub:'Under selected category.',  lbl:'Asset name  (e.g. Home Value, Car, Equipment)' },
-    };
+    // Detailed mode: per-group colour palettes (blue → cash, green → inv, amber → asset)
+    const CASH_PALETTE = ['#60a5fa','#3b82f6','#2563eb','#93c5fd','#bfdbfe'];
+    const INV_PALETTE  = ['#4ade80','#22c55e','#16a34a','#86efac','#bbf7d0'];
+    const AST_PALETTE  = ['#f59e0b','#d97706','#b45309','#fcd34d','#fde68a'];
 
+    const MODAL_META = {
+        'cash-inst':  { title:'Add Institution',   sub:'Appears across all years.',  lbl:'Institution name  (e.g. Capital One, Chase)' },
+        'cash-acc':   { title:'Add Account',        sub:'Under selected institution.',lbl:'Account name  (e.g. Checking, HYSA)' },
+        'inv-brk':    { title:'Add Brokerage',      sub:'Appears across all years.',  lbl:'Brokerage name  (e.g. Schwab, Fidelity)' },
+        'inv-hold':   { title:'Add Holding',        sub:'Under selected brokerage.',  lbl:'Ticker / Name  (e.g. VOO, AAPL, BTC)' },
+        'ast-cat':    { title:'Add Asset Category', sub:'Appears across all years.',  lbl:'Category name  (e.g. Real Estate, Vehicle)' },
+        'ast-item':   { title:'Add Asset',          sub:'Under selected category.',   lbl:'Asset name  (e.g. Home Value, Car)' },
+    };
 
     // ════════════════════════════════════════════════════════════════
     //  STATE
@@ -517,11 +531,14 @@
     let STATE = {
         year:        new Date().getFullYear(),
         activeView:  'year',
-        cash:        [],  // [{ id, name, accounts: [{id, name, values:{}}] }]
-        investments: [],  // [{ id, name, holdings: [{id, ticker, quantity, values:{}}] }]
-        assets:      [],  // [{ id, name, items:    [{id, name, values:{}}] }]
+        cash:        [],
+        investments: [],
+        assets:      [],
     };
 
+    // ── Pie detail toggle ────────────────────────────────────────
+    let pieDetailed    = false;
+    let _lastChartData = null;   // cached for re-rendering on toggle
 
     // ════════════════════════════════════════════════════════════════
     //  HELPERS
@@ -543,10 +560,8 @@
         return `<span class="${cls}">${d >= 0 ? '▲' : '▼'}&nbsp;${fmtAmt(Math.abs(d))}</span>`;
     }
 
-
     // ════════════════════════════════════════════════════════════════
-    //  LOCAL OPTIMISTIC CALCULATIONS  (minimal — used only for oninput)
-    //  All authoritative values come from the API response on onblur.
+    //  LOCAL CALCULATIONS
     // ════════════════════════════════════════════════════════════════
     const cashAccV  = (acc, mi)  => _getV(acc.values, mi);
     const cashInstT = (inst, mi) => inst.accounts.reduce((s,a) => s + cashAccV(a,mi), 0);
@@ -562,9 +577,23 @@
 
     const nwTotal   = mi         => cashTotal(mi) + invTotal(mi) + astTotal(mi);
 
+    // ════════════════════════════════════════════════════════════════
+    //  PIE DETAIL TOGGLE
+    // ════════════════════════════════════════════════════════════════
+    function setPieMode(detailed) {
+        pieDetailed = detailed;
+        document.querySelectorAll('#pieToggle .detail-pill').forEach((b, i) => {
+            b.classList.toggle('active', i === (detailed ? 1 : 0));
+        });
+        if (pieChart) {
+            pieChart.options.plugins.legend.position = detailed ? 'right' : 'bottom';
+            pieChart.options.plugins.legend.labels.font = { size: detailed ? 9 : 11 };
+        }
+        if (_lastChartData) updateCharts(_lastChartData);
+    }
 
     // ════════════════════════════════════════════════════════════════
-    //  API  — Pattern A stubs
+    //  API
     // ════════════════════════════════════════════════════════════════
     async function apiFetch(path, opts = {}) {
         try {
@@ -584,42 +613,30 @@
         STATE.assets      = data.assets      || [];
     }
 
-    // Cell save — returns NetWorthSummaryOut (compute_networth_summary)
-    const apiSaveCell = (itemId, year, mi, val) => apiFetch('/api/networth/cells', {
+    const apiSaveCell    = (itemId, year, mi, val) => apiFetch('/api/networth/cells', {
         method: 'PUT',
         body: JSON.stringify({ item_id: itemId, year, month_idx: mi,
             value: val === '' ? null : parseFloat(val) }),
     });
-
-    // Holding quantity update
-    const apiUpdateQty = (holdId, qty) => apiFetch(
+    const apiUpdateQty   = (holdId, qty) => apiFetch(
         `/api/networth/investments/holdings/${holdId}/quantity`,
         { method: 'PUT', body: JSON.stringify({ quantity: parseFloat(qty) || 0 }) }
     );
-
-    // CRUD — Cash
-    const apiAddCashInst  = n          => apiFetch('/api/networth/cash/institutions', { method:'POST', body:JSON.stringify({name:n}) });
-    const apiAddCashAcc   = (id, n)    => apiFetch(`/api/networth/cash/institutions/${id}/accounts`, { method:'POST', body:JSON.stringify({name:n}) });
-    const apiDelCashInst  = id         => apiFetch(`/api/networth/cash/institutions/${id}`, { method:'DELETE' });
-    const apiDelCashAcc   = id         => apiFetch(`/api/networth/cash/accounts/${id}`, { method:'DELETE' });
-
-    // CRUD — Investments
-    const apiAddInvBrk    = n          => apiFetch('/api/networth/investments/brokerages', { method:'POST', body:JSON.stringify({name:n}) });
-    const apiAddInvHold   = (id,t,q)   => apiFetch(`/api/networth/investments/brokerages/${id}/holdings`, { method:'POST', body:JSON.stringify({ticker:t, quantity:q}) });
-    const apiDelInvBrk    = id         => apiFetch(`/api/networth/investments/brokerages/${id}`, { method:'DELETE' });
-    const apiDelInvHold   = id         => apiFetch(`/api/networth/investments/holdings/${id}`, { method:'DELETE' });
-
-    // CRUD — Assets
-    const apiAddAstCat    = n          => apiFetch('/api/networth/assets/categories', { method:'POST', body:JSON.stringify({name:n}) });
-    const apiAddAstItem   = (id, n)    => apiFetch(`/api/networth/assets/categories/${id}/items`, { method:'POST', body:JSON.stringify({name:n}) });
-    const apiDelAstCat    = id         => apiFetch(`/api/networth/assets/categories/${id}`, { method:'DELETE' });
-    const apiDelAstItem   = id         => apiFetch(`/api/networth/assets/items/${id}`, { method:'DELETE' });
-
+    const apiAddCashInst  = n       => apiFetch('/api/networth/cash/institutions',          { method:'POST', body:JSON.stringify({name:n}) });
+    const apiAddCashAcc   = (id, n) => apiFetch(`/api/networth/cash/institutions/${id}/accounts`, { method:'POST', body:JSON.stringify({name:n}) });
+    const apiDelCashInst  = id      => apiFetch(`/api/networth/cash/institutions/${id}`,    { method:'DELETE' });
+    const apiDelCashAcc   = id      => apiFetch(`/api/networth/cash/accounts/${id}`,        { method:'DELETE' });
+    const apiAddInvBrk    = n       => apiFetch('/api/networth/investments/brokerages',     { method:'POST', body:JSON.stringify({name:n}) });
+    const apiAddInvHold   = (id,t,q)=> apiFetch(`/api/networth/investments/brokerages/${id}/holdings`, { method:'POST', body:JSON.stringify({ticker:t, quantity:q}) });
+    const apiDelInvBrk    = id      => apiFetch(`/api/networth/investments/brokerages/${id}`, { method:'DELETE' });
+    const apiDelInvHold   = id      => apiFetch(`/api/networth/investments/holdings/${id}`, { method:'DELETE' });
+    const apiAddAstCat    = n       => apiFetch('/api/networth/assets/categories',          { method:'POST', body:JSON.stringify({name:n}) });
+    const apiAddAstItem   = (id, n) => apiFetch(`/api/networth/assets/categories/${id}/items`, { method:'POST', body:JSON.stringify({name:n}) });
+    const apiDelAstCat    = id      => apiFetch(`/api/networth/assets/categories/${id}`,   { method:'DELETE' });
+    const apiDelAstItem   = id      => apiFetch(`/api/networth/assets/items/${id}`,        { method:'DELETE' });
 
     // ════════════════════════════════════════════════════════════════
     //  INPUT HANDLERS
-    //  oninput → optimistic local update of the block total + NW bar
-    //  onblur  → fire-and-forget API → applyNetWorthSummary
     // ════════════════════════════════════════════════════════════════
     function _storeVal(valuesObj, mi, val) {
         const v = parseFloat(val);
@@ -648,9 +665,9 @@
         const hold = brk.holdings.find(h => h.id === holdId);
         if (!hold) return;
         _storeVal(hold.values, mi, val);
-        setTxt(`inv-brk-tot-${brkId}`,  fmtAmt(invBrkT(brk, mi)));
-        setTxt('blk-inv-total',          fmtAmt(invTotal(mi)));
-        setTxt('nw-bar-total',           fmtAmt(nwTotal(mi)));
+        setTxt(`inv-brk-tot-${brkId}`, fmtAmt(invBrkT(brk, mi)));
+        setTxt('blk-inv-total',         fmtAmt(invTotal(mi)));
+        setTxt('nw-bar-total',          fmtAmt(nwTotal(mi)));
     }
     async function onInvBlur(holdId, year, mi, val) {
         const data = await apiSaveCell(holdId, year, mi, val);
@@ -662,12 +679,8 @@
         if (!brk) return;
         const hold = brk.holdings.find(h => h.id === holdId);
         if (hold) hold.quantity = parseFloat(val) || 0;
-        // Note: quantity changes don't affect stored monthly values until
-        // the market price API is connected and auto-computes quantity × price.
     }
-    async function onQtyBlur(holdId, val) {
-        await apiUpdateQty(holdId, val);
-    }
+    async function onQtyBlur(holdId, val) { await apiUpdateQty(holdId, val); }
 
     function onAstInput(catId, itemId, mi, val) {
         const cat = STATE.assets.find(c => c.id === catId);
@@ -684,15 +697,12 @@
         if (data) applyNetWorthSummary(data, mi);
     }
 
-
     // ════════════════════════════════════════════════════════════════
-    //  PATTERN A DOM UPDATE
-    //  Called after every onBlur with the NetWorthSummaryOut payload.
+    //  PATTERN A DOM UPDATE  (after every onBlur)
     // ════════════════════════════════════════════════════════════════
     function applyNetWorthSummary(data, mi) {
         const s = data.summary;
 
-        // ── Summary cards ────────────────────────────────────────────
         const nwEl = document.getElementById('sc-nw');
         if (nwEl) { nwEl.textContent = fmtAmt(s.net_worth); nwEl.style.color = s.net_worth >= 0 ? 'var(--accent)' : 'var(--red)'; }
         setTxt('sc-cash',         fmtAmt(s.cash));
@@ -705,7 +715,6 @@
         setTxt('sc-inv-pct',      s.investments_pct != null ? s.investments_pct.toFixed(1) + '% of total' : '—');
         setTxt('sc-ast-pct',      s.assets_pct      != null ? s.assets_pct.toFixed(1)      + '% of total' : '—');
 
-        // MoM badge
         const momEl = document.getElementById('sc-nw-mom');
         if (momEl) {
             if (s.nw_delta == null) { momEl.className='badge nil'; momEl.textContent='—'; }
@@ -716,7 +725,6 @@
             }
         }
 
-        // ── Block stat boxes ──────────────────────────────────────────
         setTxt('blk-cash-total', fmtAmt(s.cash));
         setTxt('blk-inv-total',  fmtAmt(s.investments));
         setTxt('blk-ast-total',  fmtAmt(s.assets));
@@ -724,11 +732,9 @@
         setHtml('blk-inv-delta',  makeDelta(s.investments, s.investments - (s.investments_delta ?? 0)));
         setHtml('blk-ast-delta',  makeDelta(s.assets,      s.assets      - (s.assets_delta      ?? 0)));
 
-        // ── NW bar ────────────────────────────────────────────────────
         setTxt('nw-bar-total', fmtAmt(s.net_worth));
         setHtml('nw-bar-delta', makeDelta(s.net_worth, s.net_worth - (s.nw_delta ?? 0)));
 
-        // ── Institution / brokerage / category subtotals ──────────────
         Object.entries(data.cash_inst_totals  || {}).forEach(([id,v]) => setTxt(`cash-inst-tot-${id}`, fmtAmt(v)));
         Object.entries(data.cash_inst_deltas  || {}).forEach(([id,d]) => {
             const prev = (data.cash_inst_totals?.[id] ?? 0) - (d ?? 0);
@@ -745,12 +751,10 @@
             setHtml(`ast-cat-dlt-${id}`, makeDelta(data.ast_cat_totals?.[id], prev));
         });
 
-        // ── Leaf-level deltas ─────────────────────────────────────────
         Object.entries(data.cash_acc_deltas   || {}).forEach(([id,d]) => setHtml(`dlt-cash-acc-${id}`,  _fmtDeltaVal(d)));
         Object.entries(data.inv_hold_deltas   || {}).forEach(([id,d]) => setHtml(`dlt-inv-hold-${id}`,  _fmtDeltaVal(d)));
         Object.entries(data.ast_item_deltas   || {}).forEach(([id,d]) => setHtml(`dlt-ast-item-${id}`,  _fmtDeltaVal(d)));
 
-        // ── Charts ────────────────────────────────────────────────────
         updateCharts(data);
     }
 
@@ -761,21 +765,16 @@
         return `<span class="${cls}">${d >= 0 ? '▲' : '▼'}&nbsp;${fmtAmt(Math.abs(d))}</span>`;
     }
 
-
     // ════════════════════════════════════════════════════════════════
     //  HTML BUILDERS
     // ════════════════════════════════════════════════════════════════
     function buildYearCards() {
-        // Use locally available data (latest or zeros before API response)
-        const lfm = (() => {
-            for (let m = 11; m >= 0; m--) { if (nwTotal(m) > 0) return m; }
-            return null;
-        })();
-        const mi   = lfm ?? 0;
-        const pmi  = mi > 0 ? mi - 1 : null;
-        const nw   = nwTotal(mi), ct = cashTotal(mi), it = invTotal(mi), at = astTotal(mi);
-        const nwp  = pmi !== null ? nwTotal(pmi) : null;
-        const mom  = nwp !== null ? nw - nwp : null;
+        const lfm = (() => { for (let m=11;m>=0;m--) { if (nwTotal(m)>0) return m; } return null; })();
+        const mi  = lfm ?? 0;
+        const pmi = mi > 0 ? mi - 1 : null;
+        const nw  = nwTotal(mi), ct = cashTotal(mi), it = invTotal(mi), at = astTotal(mi);
+        const nwp = pmi !== null ? nwTotal(pmi) : null;
+        const mom = nwp !== null ? nw - nwp : null;
         return `
     <div class="cards-row">
         <div class="sum-card">
@@ -831,7 +830,6 @@
     </div>`;
     }
 
-    // ── Cash block ───────────────────────────────────────────────────
     function buildCashAccountRow(acc, instId, mi) {
         const v = acc.values[String(mi)] ?? acc.values[mi] ?? '';
         return `
@@ -902,23 +900,18 @@
     </div>`;
     }
 
-    // ── Investments block ────────────────────────────────────────────
     function buildInvHoldingRow(hold, brkId, mi) {
         const v = hold.values[String(mi)] ?? hold.values[mi] ?? '';
-        // TODO: When market price API is connected, auto-compute:
-        //       value = hold.quantity × fetch_price(hold.ticker, year, mi)
-        //       and replace the amount-input with a read-only display.
         return `
     <div class="leaf-row">
         <div class="holding-meta">
             <span class="ticker-badge">${esc(hold.ticker)}</span>
             <span class="qty-x">×</span>
             <input type="number" class="qty-input" value="${hold.quantity || ''}"
-                step="0.01" min="0" placeholder="0"
-                title="Number of shares / units"
+                step="0.01" min="0" placeholder="0" title="Number of shares / units"
                 oninput="onQtyInput('${brkId}','${hold.id}',this.value)"
                 onblur="onQtyBlur('${hold.id}',this.value)"/>
-            <span class="manual-badge" title="Value manually entered. Future: auto-calculated from quantity × market price.">manual</span>
+            <span class="manual-badge" title="Value manually entered.">manual</span>
         </div>
         <input type="number" class="amount-input" placeholder="—" value="${v}"
             oninput="onInvInput('${brkId}','${hold.id}',${mi},this.value)"
@@ -985,7 +978,6 @@
     </div>`;
     }
 
-    // ── Assets block ─────────────────────────────────────────────────
     function buildAstItemRow(item, catId, mi) {
         const v = item.values[String(mi)] ?? item.values[mi] ?? '';
         return `
@@ -1056,7 +1048,6 @@
     </div>`;
     }
 
-    // ── NET WORTH total bar ───────────────────────────────────────────
     function buildNwBar(mi) {
         return `
     <div class="nw-total-bar">
@@ -1073,7 +1064,6 @@
         </div>
     </div>`;
     }
-
 
     // ════════════════════════════════════════════════════════════════
     //  CHARTS
@@ -1098,10 +1088,10 @@
             data: {
                 labels: MONTHS,
                 datasets: [
-                    { label:'Net Worth',   data:Array(12).fill(null), borderColor:'#6c63ff', backgroundColor:nwGrad,          borderWidth:2.5, tension:0.4, pointRadius:3, fill:true,  spanGaps:false },
-                    { label:'Cash',        data:Array(12).fill(null), borderColor:'#60a5fa', backgroundColor:'transparent',    borderWidth:1.5, tension:0.4, pointRadius:2, borderDash:[4,3], spanGaps:false },
-                    { label:'Investments', data:Array(12).fill(null), borderColor:'#4ade80', backgroundColor:'transparent',    borderWidth:1.5, tension:0.4, pointRadius:2, borderDash:[4,3], spanGaps:false },
-                    { label:'Assets',      data:Array(12).fill(null), borderColor:'#f59e0b', backgroundColor:'transparent',    borderWidth:1.5, tension:0.4, pointRadius:2, borderDash:[4,3], spanGaps:false },
+                    { label:'Net Worth',   data:Array(12).fill(null), borderColor:'#6c63ff', backgroundColor:nwGrad,       borderWidth:2.5, tension:0.4, pointRadius:3, fill:true, spanGaps:false },
+                    { label:'Cash',        data:Array(12).fill(null), borderColor:'#60a5fa', backgroundColor:'transparent', borderWidth:1.5, tension:0.4, pointRadius:2, borderDash:[4,3], spanGaps:false },
+                    { label:'Investments', data:Array(12).fill(null), borderColor:'#4ade80', backgroundColor:'transparent', borderWidth:1.5, tension:0.4, pointRadius:2, borderDash:[4,3], spanGaps:false },
+                    { label:'Assets',      data:Array(12).fill(null), borderColor:'#f59e0b', backgroundColor:'transparent', borderWidth:1.5, tension:0.4, pointRadius:2, borderDash:[4,3], spanGaps:false },
                 ],
             },
             options: {
@@ -1119,13 +1109,13 @@
             type: 'doughnut',
             data: {
                 labels: ['Cash','Investments','Assets'],
-                datasets:[{ data:[1,1,1], backgroundColor:PIE_COLORS,
+                datasets:[{ data:[0,0,0], backgroundColor: PIE_COLORS,
                     borderColor:'#1a1d27', borderWidth:3, hoverOffset:6 }],
             },
             options: {
                 responsive:true, maintainAspectRatio:false, cutout:'62%',
                 plugins: {
-                    legend:{ position:'bottom', labels:{ padding:12, usePointStyle:true } },
+                    legend:{ position:'bottom', labels:{ padding:12, usePointStyle:true, boxWidth:10, font:{size:11} } },
                     tooltip:{ backgroundColor:'#222536', borderColor:'#2e3249', borderWidth:1, callbacks:{
                             label: c => {
                                 const tot = c.dataset.data.reduce((a,b)=>a+b,0);
@@ -1140,6 +1130,11 @@
 
     function updateCharts(data) {
         if (!lineChart || !pieChart) return;
+
+        // ── Cache data so the detail toggle can re-render without an API call ─
+        _lastChartData = data;
+
+        // ── Line chart (unchanged) ───────────────────────────────────────────
         const toP = v => v > 0 ? v : null;
         lineChart.data.datasets[0].data = (data.net_worth_series  || Array(12).fill(0)).map(toP);
         lineChart.data.datasets[1].data = (data.group_series?.cash        || Array(12).fill(0)).map(toP);
@@ -1147,18 +1142,55 @@
         lineChart.data.datasets[3].data = (data.group_series?.assets      || Array(12).fill(0)).map(toP);
         lineChart.update();
 
-        const lfm = data.latest_month_idx ?? 0;
-        pieChart.data.datasets[0].data = [
-            data.summary?.cash        ?? 0,
-            data.summary?.investments ?? 0,
-            data.summary?.assets      ?? 0,
-        ];
+        // ── Allocation pie — Summary vs. Detailed ────────────────────────────
+        const lfm = data.latest_month_idx;
+
+        if (pieDetailed && lfm != null) {
+            // Detailed: one slice per institution / brokerage / asset-category
+            // coloured by group so membership is still clear.
+            const labels = [], values = [], colors = [];
+
+            STATE.cash.forEach((inst, i) => {
+                const v = cashInstT(inst, lfm);
+                if (v > 0) { labels.push(inst.name); values.push(v); colors.push(CASH_PALETTE[i % CASH_PALETTE.length]); }
+            });
+            STATE.investments.forEach((brk, i) => {
+                const v = invBrkT(brk, lfm);
+                if (v > 0) { labels.push(brk.name); values.push(v); colors.push(INV_PALETTE[i % INV_PALETTE.length]); }
+            });
+            STATE.assets.forEach((cat, i) => {
+                const v = astCatT(cat, lfm);
+                if (v > 0) { labels.push(cat.name); values.push(v); colors.push(AST_PALETTE[i % AST_PALETTE.length]); }
+            });
+
+            if (labels.length === 0) {
+                // No data at lfm — fall back to summary zeros
+                pieChart.data.labels                          = ['Cash','Investments','Assets'];
+                pieChart.data.datasets[0].data                = [0, 0, 0];
+                pieChart.data.datasets[0].backgroundColor     = PIE_COLORS;
+            } else {
+                pieChart.data.labels                          = labels;
+                pieChart.data.datasets[0].data                = values;
+                pieChart.data.datasets[0].backgroundColor     = colors;
+            }
+        } else {
+            // Summary: three group buckets
+            pieChart.data.labels                          = ['Cash','Investments','Assets'];
+            pieChart.data.datasets[0].data                = [
+                data.summary?.cash        ?? 0,
+                data.summary?.investments ?? 0,
+                data.summary?.assets      ?? 0,
+            ];
+            pieChart.data.datasets[0].backgroundColor     = PIE_COLORS;
+        }
+
+        pieChart.data.datasets[0].borderColor = '#1a1d27';
+        pieChart.data.datasets[0].borderWidth = 3;
         pieChart.update();
 
         setTxt('lineSub', String(data.year ?? STATE.year));
-        setTxt('pieSub',  data.latest_month_idx != null ? `${MONTHS[data.latest_month_idx]} ${data.year}` : '—');
+        setTxt('pieSub',  lfm != null ? `${MONTHS[lfm]} ${data.year ?? STATE.year}` : '—');
     }
-
 
     // ════════════════════════════════════════════════════════════════
     //  ACCORDION TOGGLES
@@ -1181,15 +1213,13 @@
         if (chv) chv.style.transform = open ? 'rotate(-90deg)' : '';
     }
 
-
     // ════════════════════════════════════════════════════════════════
     //  DELETE HANDLERS
     // ════════════════════════════════════════════════════════════════
     async function doDelCashInst(id) {
         await apiDelCashInst(id);
         STATE.cash = STATE.cash.filter(i => i.id !== id);
-        if (STATE.activeView !== 'year') renderMonthView(STATE.activeView);
-        else renderYearView();
+        STATE.activeView !== 'year' ? renderMonthView(STATE.activeView) : renderYearView();
     }
     async function doDelCashAcc(instId, accId) {
         await apiDelCashAcc(accId);
@@ -1200,8 +1230,7 @@
     async function doDelInvBrk(id) {
         await apiDelInvBrk(id);
         STATE.investments = STATE.investments.filter(b => b.id !== id);
-        if (STATE.activeView !== 'year') renderMonthView(STATE.activeView);
-        else renderYearView();
+        STATE.activeView !== 'year' ? renderMonthView(STATE.activeView) : renderYearView();
     }
     async function doDelInvHold(brkId, holdId) {
         await apiDelInvHold(holdId);
@@ -1212,8 +1241,7 @@
     async function doDelAstCat(id) {
         await apiDelAstCat(id);
         STATE.assets = STATE.assets.filter(c => c.id !== id);
-        if (STATE.activeView !== 'year') renderMonthView(STATE.activeView);
-        else renderYearView();
+        STATE.activeView !== 'year' ? renderMonthView(STATE.activeView) : renderYearView();
     }
     async function doDelAstItem(catId, itemId) {
         await apiDelAstItem(itemId);
@@ -1222,39 +1250,41 @@
         if (STATE.activeView !== 'year') renderMonthView(STATE.activeView);
     }
 
-
     // ════════════════════════════════════════════════════════════════
     //  VIEW RENDERERS
     // ════════════════════════════════════════════════════════════════
     function renderYearView() {
         setHtml('yearCardsEl', buildYearCards());
-        // Charts use local STATE data for initial render;
-        // authoritative chart data comes from the next API response.
-        const nwS = Array.from({length:12}, (_,mi) => nwTotal(mi));
-        const cS  = Array.from({length:12}, (_,mi) => cashTotal(mi));
-        const iS  = Array.from({length:12}, (_,mi) => invTotal(mi));
-        const aS  = Array.from({length:12}, (_,mi) => astTotal(mi));
+
+        // ── BUG FIX: use the latest filled month (not hard-coded Dec) ─────────
+        const lfm = (() => { for (let m=11;m>=0;m--) { if (nwTotal(m)>0) return m; } return null; })();
+        const mi  = lfm ?? 0;
+
+        const nwS = Array.from({length:12}, (_,m) => nwTotal(m));
+        const cS  = Array.from({length:12}, (_,m) => cashTotal(m));
+        const iS  = Array.from({length:12}, (_,m) => invTotal(m));
+        const aS  = Array.from({length:12}, (_,m) => astTotal(m));
+
         updateCharts({
-            year: STATE.year,
-            latest_month_idx: (() => { for(let m=11;m>=0;m--) if(nwTotal(m)>0) return m; return null; })(),
+            year:              STATE.year,
+            latest_month_idx:  lfm,
             net_worth_series:  nwS,
             group_series:      { cash:cS, investments:iS, assets:aS },
             summary: {
-                cash:        cashTotal(11),
-                investments: invTotal(11),
-                assets:      astTotal(11),
+                cash:        cashTotal(mi),   // ← was cashTotal(11)
+                investments: invTotal(mi),    // ← was invTotal(11)
+                assets:      astTotal(mi),    // ← was astTotal(11)
             },
         });
     }
 
     function renderMonthView(mi) {
-        setHtml('monthCardsEl',  buildMonthCards(mi));
-        setHtml('cashBlockEl',   buildCashBlock(mi));
-        setHtml('invBlockEl',    buildInvBlock(mi));
-        setHtml('astBlockEl',    buildAstBlock(mi));
-        setHtml('nwBarEl',       buildNwBar(mi));
+        setHtml('monthCardsEl', buildMonthCards(mi));
+        setHtml('cashBlockEl',  buildCashBlock(mi));
+        setHtml('invBlockEl',   buildInvBlock(mi));
+        setHtml('astBlockEl',   buildAstBlock(mi));
+        setHtml('nwBarEl',      buildNwBar(mi));
     }
-
 
     // ════════════════════════════════════════════════════════════════
     //  NAVIGATION
@@ -1287,7 +1317,6 @@
         switchView(STATE.activeView);
     }
 
-
     // ════════════════════════════════════════════════════════════════
     //  MODAL
     // ════════════════════════════════════════════════════════════════
@@ -1300,7 +1329,6 @@
         setTxt('modalSub',   m.sub   || '');
         setTxt('modalLbl',   m.lbl   || 'Name');
         document.getElementById('mName').value = '';
-        // Show quantity field only for investment holdings
         const qtyField = document.getElementById('modalQtyField');
         qtyField.style.display = mode === 'inv-hold' ? '' : 'none';
         if (mode === 'inv-hold') document.getElementById('mQty').value = '';
@@ -1318,26 +1346,21 @@
         if (_mMode === 'cash-inst') {
             const r = await apiAddCashInst(name);
             STATE.cash.push({ id: r?.id || tmpId(), name, accounts:[] });
-
         } else if (_mMode === 'cash-acc') {
             const r = await apiAddCashAcc(_mParentId, name);
             const inst = STATE.cash.find(i => i.id === _mParentId);
             if (inst) inst.accounts.push({ id: r?.id || tmpId(), name, values:{} });
-
         } else if (_mMode === 'inv-brk') {
             const r = await apiAddInvBrk(name);
             STATE.investments.push({ id: r?.id || tmpId(), name, holdings:[] });
-
         } else if (_mMode === 'inv-hold') {
             const qty = parseFloat(document.getElementById('mQty').value) || 0;
             const r   = await apiAddInvHold(_mParentId, name, qty);
             const brk = STATE.investments.find(b => b.id === _mParentId);
             if (brk) brk.holdings.push({ id: r?.id || tmpId(), ticker:name, quantity:qty, values:{} });
-
         } else if (_mMode === 'ast-cat') {
             const r = await apiAddAstCat(name);
             STATE.assets.push({ id: r?.id || tmpId(), name, items:[] });
-
         } else if (_mMode === 'ast-item') {
             const r = await apiAddAstItem(_mParentId, name);
             const cat = STATE.assets.find(c => c.id === _mParentId);
@@ -1356,7 +1379,6 @@
         if (e.key === 'Escape') closeModal();
     });
 
-
     // ════════════════════════════════════════════════════════════════
     //  INIT
     // ════════════════════════════════════════════════════════════════
@@ -1364,7 +1386,6 @@
         document.getElementById('hDate').textContent =
             new Date().toLocaleDateString('en-US', { month:'long', year:'numeric' });
 
-        // Build year picker
         const cur    = new Date().getFullYear();
         STATE.year   = cur;
         const picker = document.getElementById('yearPicker');
@@ -1377,7 +1398,6 @@
         picker.addEventListener('change', () => changeYear(picker.value));
         setTxt('yearViewBtn', cur);
 
-        // Sub-nav handlers
         document.getElementById('yearViewBtn').addEventListener('click', () => switchView('year'));
         document.querySelectorAll('.month-btn').forEach(b =>
             b.addEventListener('click', () => switchView(+b.dataset.mi)));

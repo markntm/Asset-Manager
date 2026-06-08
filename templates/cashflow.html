@@ -171,7 +171,6 @@
         .inc-title { color: var(--green); }
         .exp-title { color: var(--red); }
 
-        /* Stat boxes in block headers */
         .block-stats { display: flex; gap: 10px; align-items: stretch; }
         .stat-box {
             background: var(--surface-2); border: 1px solid var(--border);
@@ -195,7 +194,6 @@
         .stat-input::-webkit-inner-spin-button,
         .stat-input::-webkit-outer-spin-button { -webkit-appearance: none; }
 
-        /* Block body */
         .block-body { border-top: 1px solid var(--border); }
 
         /* ── Income category rows ───────────────────────────────── */
@@ -223,7 +221,6 @@
             min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
 
-        /* Smaller stat boxes for category level */
         .cat-stats { display: flex; gap: 8px; align-items: stretch; margin-left: auto; }
         .cat-stat {
             background: var(--surface-2); border: 1px solid var(--border);
@@ -292,7 +289,6 @@
         .exp-subcat-row:hover .btn-del { color: var(--muted); }
         .btn-del:hover { color: var(--red) !important; }
 
-        /* Add row */
         .add-row { padding: 10px 20px; }
         .btn-add-row {
             background: none; border: 1px dashed var(--border);
@@ -315,12 +311,29 @@
         .chart-panel.month-pie { margin-top: 14px; }
         .cp-head {
             display: flex; align-items: center; justify-content: space-between;
-            margin-bottom: 16px;
+            margin-bottom: 16px; gap: 12px;
         }
         .cp-title { font-size: 0.875rem; font-weight: 600; }
         .cp-sub   { font-size: 0.78rem; color: var(--muted); }
+        .cp-head-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
         .chart-wrap          { height: 300px; position: relative; }
         .chart-wrap.tall     { height: 340px; }
+
+        /* ── Detail view toggle pills ────────────────────────────── */
+        .detail-pills { display: flex; gap: 3px; }
+        .detail-pill {
+            padding: 2px 10px; border-radius: 20px;
+            border: 1px solid var(--border); background: none;
+            color: var(--muted); font-size: 0.72rem; font-weight: 600;
+            cursor: pointer; transition: all 0.15s; font-family: inherit;
+            white-space: nowrap;
+        }
+        .detail-pill.active {
+            background: var(--accent); border-color: var(--accent); color: #fff;
+        }
+        .detail-pill:not(.active):hover {
+            border-color: var(--accent); color: var(--accent);
+        }
 
         /* ── Delta color helpers ─────────────────────────────────── */
         .dlt-up  { color: var(--green); }
@@ -435,7 +448,13 @@
             <div class="chart-panel">
                 <div class="cp-head">
                     <span class="cp-title">Annual Expense Breakdown</span>
-                    <span class="cp-sub" id="yearPieSub"></span>
+                    <div class="cp-head-right">
+                        <span class="cp-sub" id="yearPieSub"></span>
+                        <div class="detail-pills" id="yearPieToggle">
+                            <button class="detail-pill active" onclick="setYearPieMode(false)">Summary</button>
+                            <button class="detail-pill"        onclick="setYearPieMode(true)">Detailed</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="chart-wrap"><canvas id="yearPieChart"></canvas></div>
             </div>
@@ -450,7 +469,13 @@
         <div class="chart-panel month-pie">
             <div class="cp-head">
                 <span class="cp-title">Expense Breakdown</span>
-                <span class="cp-sub" id="monthPieSub"></span>
+                <div class="cp-head-right">
+                    <span class="cp-sub" id="monthPieSub"></span>
+                    <div class="detail-pills" id="monthPieToggle">
+                        <button class="detail-pill active" onclick="setMonthPieMode(false)">Summary</button>
+                        <button class="detail-pill"        onclick="setMonthPieMode(true)">Detailed</button>
+                    </div>
+                </div>
             </div>
             <div class="chart-wrap"><canvas id="monthPieChart"></canvas></div>
         </div>
@@ -488,16 +513,17 @@
 
     // ════════════════════════════════════════════════════════════════
     //  STATE
-    //  income:   [{id, name, values:{mi:float}}]
-    //  expenses: [{id, name, budget:{mi:float},
-    //              subcategories:[{id, name, values:{mi:float}}]}]
     // ════════════════════════════════════════════════════════════════
     let STATE = {
-        year:       new Date().getFullYear(),
-        activeView: 'year',
-        income:     [],
-        expenses:   [],
+        year:             new Date().getFullYear(),
+        activeView:       'year',
+        income:           [],
+        expenses:         [],
     };
+
+    // ── Pie detail toggle flags ──────────────────────────────────
+    let yearPieDetailed  = false;
+    let monthPieDetailed = false;
 
     // ════════════════════════════════════════════════════════════════
     //  HELPERS
@@ -509,14 +535,8 @@
     const esc    = s => String(s)
         .replace(/&/g,'&amp;').replace(/</g,'&lt;')
         .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    // JS coerces numeric obj keys to strings, so obj[0] === obj["0"] — both patterns are safe.
     const getV   = (obj, mi) => (obj && obj[mi] != null) ? parseFloat(obj[mi]) || 0 : 0;
 
-    /**
-     * Returns a coloured HTML snippet for a delta value.
-     * positiveIsGood=true  → positive delta is green (income context)
-     * positiveIsGood=false → positive delta is red   (expense context)
-     */
     function makeDelta(curr, prev, positiveIsGood = true) {
         if (curr == null || prev == null)
             return `<span class="dlt-nil">—</span>`;
@@ -533,7 +553,7 @@
     const setHtml = (id, h) => { const e = document.getElementById(id); if (e) e.innerHTML  = h; };
 
     // ════════════════════════════════════════════════════════════════
-    //  CALCULATIONS  (local, used for optimistic updates)
+    //  CALCULATIONS
     // ════════════════════════════════════════════════════════════════
     const incCatV    = (cat,  mi) => getV(cat.values, mi);
     const incTotal   = mi        => STATE.income.reduce((s,c)  => s + incCatV(c, mi), 0);
@@ -551,10 +571,34 @@
     const expYearTot = () => MONTHS.reduce((s,_,mi) => s + expTotal(mi), 0);
 
     // ════════════════════════════════════════════════════════════════
-    //  API  — Pattern A stubs
-    //  On blur the frontend sends the raw value; the backend response
-    //  may return authoritative totals (ready to slot in once backend
-    //  endpoints are updated to this new schema).
+    //  PIE DETAIL TOGGLE HANDLERS
+    // ════════════════════════════════════════════════════════════════
+    function setYearPieMode(detailed) {
+        yearPieDetailed = detailed;
+        document.querySelectorAll('#yearPieToggle .detail-pill').forEach((b, i) => {
+            b.classList.toggle('active', i === (detailed ? 1 : 0));
+        });
+        if (yearPie) {
+            yearPie.options.plugins.legend.position = detailed ? 'right' : 'bottom';
+            yearPie.options.plugins.legend.labels.font = { size: detailed ? 9 : 11 };
+        }
+        updateYearCharts();
+    }
+
+    function setMonthPieMode(detailed) {
+        monthPieDetailed = detailed;
+        document.querySelectorAll('#monthPieToggle .detail-pill').forEach((b, i) => {
+            b.classList.toggle('active', i === (detailed ? 1 : 0));
+        });
+        if (monthPie) {
+            monthPie.options.plugins.legend.position = detailed ? 'right' : 'bottom';
+            monthPie.options.plugins.legend.labels.font = { size: detailed ? 9 : 11 };
+        }
+        if (typeof STATE.activeView === 'number') updateMonthChart(STATE.activeView);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  API
     // ════════════════════════════════════════════════════════════════
     async function apiFetch(path, opts = {}) {
         try {
@@ -580,7 +624,6 @@
         }));
     }
 
-    // Cell saves — backend returns computed totals when ready
     const apiSaveIncome  = (catId, yr, mi, v) => apiFetch(
         `/api/cashflow/income/${catId}/entry`,
         { method:'PUT', body: JSON.stringify({year:yr, month_idx:mi, value: v===''?null:+v}) });
@@ -593,7 +636,6 @@
         `/api/cashflow/expense/category/${catId}/budget`,
         { method:'PUT', body: JSON.stringify({year:yr, month_idx:mi, value: v===''?null:+v}) });
 
-    // CRUD
     const apiAddIncomeCat     = n        => apiFetch('/api/cashflow/income/categories',                         {method:'POST',   body:JSON.stringify({name:n})});
     const apiDelIncomeCat     = id       => apiFetch(`/api/cashflow/income/categories/${id}`,                   {method:'DELETE'});
     const apiAddExpenseCat    = n        => apiFetch('/api/cashflow/expense/categories',                        {method:'POST',   body:JSON.stringify({name:n})});
@@ -603,8 +645,6 @@
 
     // ════════════════════════════════════════════════════════════════
     //  INPUT HANDLERS
-    //  oninput  → optimistic local update + targeted DOM refresh
-    //  onblur   → fire-and-forget API sync
     // ════════════════════════════════════════════════════════════════
     function onIncInput(catId, mi, val) {
         const cat = STATE.income.find(c => c.id === catId);
@@ -634,13 +674,12 @@
         const v = parseFloat(val);
         if (isNaN(v) || val.trim() === '') delete cat.budget[mi];
         else cat.budget[String(mi)] = v;
-        // Only budget totals need updating — no need for full refresh
         setTxt('blk-exp-budget', fmtAmt(expBudTot(mi)));
     }
     function onBudgetBlur(catId, mi, val) { apiSaveBudget(catId, STATE.year, mi, val); }
 
     // ════════════════════════════════════════════════════════════════
-    //  TARGETED DOM REFRESH  (runs on every oninput — no re-render)
+    //  TARGETED DOM REFRESH
     // ════════════════════════════════════════════════════════════════
     function refreshMonthDisplay(mi) {
         const pmi  = mi > 0 ? mi - 1 : null;
@@ -649,7 +688,6 @@
         const net  = netFlow(mi);
         const rate = savRate(mi);
 
-        // Summary cards
         setTxt ('card-inc',       fmtAmt(incT));
         setHtml('card-inc-delta', makeDelta(incT, incP, true));
         setTxt ('card-exp',       fmtAmt(expT));
@@ -658,20 +696,17 @@
         if (netEl) { netEl.textContent = fmtAmt(net); netEl.style.color = net >= 0 ? 'var(--green)' : 'var(--red)'; }
         setTxt('card-savrate', rate != null ? rate.toFixed(1) + '%' : '—');
 
-        // Block header stat boxes
         setTxt ('blk-inc-total',  fmtAmt(incT));
         setHtml('blk-inc-delta',  makeDelta(incT, incP, true));
         setTxt ('blk-exp-total',  fmtAmt(expT));
         setTxt ('blk-exp-budget', fmtAmt(expBudTot(mi)));
         setHtml('blk-exp-delta',  makeDelta(expT, expP, false));
 
-        // Per-row deltas (income categories)
         STATE.income.forEach(cat => {
             const v = incCatV(cat, mi), p = pmi !== null ? incCatV(cat, pmi) : null;
             setHtml(`dlt-inc-${cat.id}`, makeDelta(v, p, true));
         });
 
-        // Per-category totals + deltas, per-subcategory deltas
         STATE.expenses.forEach(cat => {
             const cv = expCatV(cat, mi), cp = pmi !== null ? expCatV(cat, pmi) : null;
             setTxt (`expcat-tot-${cat.id}`,  fmtAmt(cv));
@@ -924,18 +959,15 @@
             },
         });
 
-        const doughnutOpts = (legendPos = 'bottom') => ({
-            responsive:true, maintainAspectRatio:false, cutout:'60%',
-            plugins:{
-                legend:{ position:legendPos, labels:{ padding:12, usePointStyle:true, boxWidth:10 } },
-                tooltip:{ ...tooltipBase, callbacks:{
-                        label: c => {
-                            const tot = c.dataset.data.reduce((a,b)=>a+b,0);
-                            const pct = tot > 0 ? (c.parsed/tot*100).toFixed(1) : 0;
-                            return ` ${fmtAmt(c.parsed)}  (${pct}%)`;
-                        }
-                    }},
-            },
+        const doughnutTooltip = (tooltipBase) => ({
+            ...tooltipBase,
+            callbacks:{
+                label: c => {
+                    const tot = c.dataset.data.reduce((a,b)=>a+b,0);
+                    const pct = tot > 0 ? (c.parsed/tot*100).toFixed(1) : 0;
+                    return ` ${fmtAmt(c.parsed)}  (${pct}%)`;
+                }
+            }
         });
 
         const pieData = () => ({
@@ -945,8 +977,73 @@
             }],
         });
 
-        yearPie  = new Chart(document.getElementById('yearPieChart'),  { type:'doughnut', data:pieData(), options:doughnutOpts('bottom') });
-        monthPie = new Chart(document.getElementById('monthPieChart'), { type:'doughnut', data:pieData(), options:doughnutOpts('right')  });
+        yearPie = new Chart(document.getElementById('yearPieChart'), {
+            type:'doughnut', data:pieData(),
+            options:{
+                responsive:true, maintainAspectRatio:false, cutout:'60%',
+                plugins:{
+                    legend:{ position:'bottom', labels:{ padding:12, usePointStyle:true, boxWidth:10, font:{size:11} } },
+                    tooltip:{ backgroundColor:'#222536', borderColor:'#2e3249', borderWidth:1, callbacks:{
+                            label: c => {
+                                const tot = c.dataset.data.reduce((a,b)=>a+b,0);
+                                const pct = tot > 0 ? (c.parsed/tot*100).toFixed(1) : 0;
+                                return ` ${fmtAmt(c.parsed)}  (${pct}%)`;
+                            }
+                        }},
+                },
+            },
+        });
+
+        monthPie = new Chart(document.getElementById('monthPieChart'), {
+            type:'doughnut', data:pieData(),
+            options:{
+                responsive:true, maintainAspectRatio:false, cutout:'60%',
+                plugins:{
+                    legend:{ position:'right', labels:{ padding:12, usePointStyle:true, boxWidth:10, font:{size:11} } },
+                    tooltip:{ backgroundColor:'#222536', borderColor:'#2e3249', borderWidth:1, callbacks:{
+                            label: c => {
+                                const tot = c.dataset.data.reduce((a,b)=>a+b,0);
+                                const pct = tot > 0 ? (c.parsed/tot*100).toFixed(1) : 0;
+                                return ` ${fmtAmt(c.parsed)}  (${pct}%)`;
+                            }
+                        }},
+                },
+            },
+        });
+    }
+
+    // ── Build the pairs array for the expense pie charts ─────────
+    function _yearPiePairs() {
+        if (yearPieDetailed) {
+            const pairs = [];
+            STATE.expenses.forEach(cat => {
+                cat.subcategories.forEach(sc => {
+                    const d = MONTHS.reduce((s,_,mi) => s + expSubV(sc, mi), 0);
+                    if (d > 0) pairs.push({ l: `${cat.name}  ›  ${sc.name}`, d });
+                });
+            });
+            return pairs;
+        }
+        return STATE.expenses.map(c => ({
+            l: c.name,
+            d: MONTHS.reduce((s,_,mi) => s + expCatV(c, mi), 0),
+        })).filter(x => x.d > 0);
+    }
+
+    function _monthPiePairs(mi) {
+        if (monthPieDetailed) {
+            const pairs = [];
+            STATE.expenses.forEach(cat => {
+                cat.subcategories.forEach(sc => {
+                    const d = expSubV(sc, mi);
+                    if (d > 0) pairs.push({ l: `${cat.name}  ›  ${sc.name}`, d });
+                });
+            });
+            return pairs;
+        }
+        return STATE.expenses.map(c => ({
+            l: c.name, d: expCatV(c, mi),
+        })).filter(x => x.d > 0);
     }
 
     function updateYearCharts() {
@@ -956,12 +1053,11 @@
         yearBar.data.datasets[1].data = MONTHS.map((_,mi) => expTotal(mi));
         yearBar.update();
 
-        const pairs = STATE.expenses.map(c => ({
-            l: c.name,
-            d: MONTHS.reduce((s,_,mi) => s + expCatV(c, mi), 0),
-        })).filter(x => x.d > 0);
+        const pairs = _yearPiePairs();
         yearPie.data.labels           = pairs.map(x => x.l);
         yearPie.data.datasets[0].data = pairs.map(x => x.d);
+        // Cycle through PIE_COLORS for any number of slices
+        yearPie.data.datasets[0].backgroundColor = pairs.map((_,i) => PIE_COLORS[i % PIE_COLORS.length]);
         yearPie.update();
 
         setTxt('barSub',     String(STATE.year));
@@ -970,11 +1066,10 @@
 
     function updateMonthChart(mi) {
         if (!monthPie) return;
-        const pairs = STATE.expenses.map(c => ({
-            l: c.name, d: expCatV(c, mi),
-        })).filter(x => x.d > 0);
+        const pairs = _monthPiePairs(mi);
         monthPie.data.labels           = pairs.map(x => x.l);
         monthPie.data.datasets[0].data = pairs.map(x => x.d);
+        monthPie.data.datasets[0].backgroundColor = pairs.map((_,i) => PIE_COLORS[i % PIE_COLORS.length]);
         monthPie.update();
         setTxt('monthPieSub', `${MONTHS[mi]} ${STATE.year}`);
     }
@@ -1028,8 +1123,8 @@
     let _mMode = '', _mCatId = '';
 
     const MODAL_META = {
-        'income-cat':    { title:'Add Income Category',   sub:'Will appear in all years.',          lbl:'Category name  (e.g. HII Mission Tech, Freelance, Relatives…)' },
-        'expense-cat':   { title:'Add Expense Category',  sub:'Will appear in all years.',          lbl:'Category name  (e.g. Fixed, Groceries, Transportation…)' },
+        'income-cat':    { title:'Add Income Category',   sub:'Will appear in all years.',          lbl:'Category name  (e.g. Salary, Freelance, Dividends…)' },
+        'expense-cat':   { title:'Add Expense Category',  sub:'Will appear in all years.',          lbl:'Category name  (e.g. Housing, Groceries, Transportation…)' },
         'expense-subcat':{ title:'Add Subcategory',       sub:'Belongs to the selected category.', lbl:'Subcategory name  (e.g. Netflix, Costco, Gas…)' },
     };
 
@@ -1125,7 +1220,6 @@
         document.getElementById('hDate').textContent =
             new Date().toLocaleDateString('en-US', { month:'long', year:'numeric' });
 
-        // Build year picker
         const cur = new Date().getFullYear();
         STATE.year = cur;
         const picker = document.getElementById('yearPicker');
@@ -1138,12 +1232,10 @@
         picker.addEventListener('change', () => changeYear(picker.value));
         setTxt('yearViewBtn', cur);
 
-        // Sub-nav click handlers
         document.getElementById('yearViewBtn').addEventListener('click', () => switchView('year'));
         document.querySelectorAll('.month-btn').forEach(b =>
             b.addEventListener('click', () => switchView(+b.dataset.mi)));
 
-        // Modal keyboard + backdrop
         document.getElementById('overlay').addEventListener('click', e => {
             if (e.target === e.currentTarget) closeModal();
         });
@@ -1152,7 +1244,6 @@
             if (e.key === 'Escape') closeModal();
         });
 
-        // Load data, init charts, show default view
         await apiLoadYear(cur);
         initCharts();
         switchView('year');
