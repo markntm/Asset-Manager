@@ -7,9 +7,10 @@ table from the raw net-worth data.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from auth import current_user_id
 from database import cashflow as cf_db
@@ -91,10 +92,15 @@ def _build_accounts(nw_data: dict, lfm: int | None, nw_total: float) -> list[dic
 
 
 @router.get("/summary")
-def get_dashboard_summary(user_id: str = Depends(current_user_id)):
-    today             = date.today()
-    year              = today.year
-    current_month_idx = today.month - 1   # 0-based
+def get_dashboard_summary(
+        year:  int | None = Query(None, ge=2000, le=2100),
+        month: int | None = Query(None, ge=1, le=12),
+        user_id: str = Depends(current_user_id)
+):
+    if year is None or month is None:   # fallback: Hawaii time (no DST)
+        now = datetime.now(ZoneInfo("Pacific/Honolulu"))
+        year, month = now.year, now.month
+    current_month_idx = month - 1
 
     nw_data = nw_db.get_networth_data(user_id, year)
     cf_data = cf_db.get_cashflow_data(user_id, year)

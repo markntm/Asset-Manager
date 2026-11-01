@@ -448,7 +448,7 @@
 
         if (allocDetailed && accounts.length > 0) {
             // One slice per individual account/holding/asset item,
-            // colour-coded by group so membership stays clear.
+            // color-coded by group so membership stays clear.
             const typeCount = { cash: 0, investment: 0, asset: 0 };
             const labels = [], values = [], colors = [];
 
@@ -489,7 +489,8 @@
     async function loadDashboard() {
         let data;
         try {
-            const r = await fetch('/api/dashboard/summary');
+            const now = new Date();
+            const r = await fetch(`/api/dashboard/summary?year=${now.getFullYear()}&month=${now.getMonth() + 1}`);
             if (r.status === 401) { location.href = '/login'; return; }
             if (!r.ok) throw new Error(r.status);
             data = await r.json();

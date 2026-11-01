@@ -43,7 +43,7 @@ app.add_middleware(
     secret_key=os.environ["SECRET_KEY"],
     https_only=bool(os.environ.get("VERCEL")),   # Secure cookies on Vercel only (plain http locally)
     same_site="lax",
-    max_age=14 * 24 * 3600,
+    max_age=14 * 24 * 3600, # Consider adding "remember-me" checkbox to login
 )
 
 
