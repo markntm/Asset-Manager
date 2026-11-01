@@ -1007,7 +1007,7 @@
             options:{
                 responsive:true, maintainAspectRatio:false, cutout:'60%',
                 plugins:{
-                    legend:{ position:'right', labels:{ padding:12, usePointStyle:true, boxWidth:10, font:{size:11} } },
+                    legend:{ position:legendPos(true), labels:{ padding:12, usePointStyle:true, boxWidth:10, font:{size:11} } },
                     tooltip:{ backgroundColor:'#222536', borderColor:'#2e3249', borderWidth:1, callbacks:{
                             label: c => {
                                 const tot = c.dataset.data.reduce((a,b)=>a+b,0);

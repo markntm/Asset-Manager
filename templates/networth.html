@@ -592,7 +592,7 @@
             b.classList.toggle('active', i === (detailed ? 1 : 0));
         });
         if (pieChart) {
-            pieChart.options.plugins.legend.position = detailed ? 'right' : 'bottom';
+            pieChart.options.plugins.legend.position = legendPos(detailed);
             pieChart.options.plugins.legend.labels.font = { size: detailed ? 9 : 11 };
         }
         if (_lastChartData) updateCharts(_lastChartData);

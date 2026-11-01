@@ -440,7 +440,7 @@
         document.querySelectorAll('#allocToggle .detail-pill').forEach((b, i) => {
             b.classList.toggle('active', i === (detailed ? 1 : 0));
         });
-        donutChart.options.plugins.legend.position = detailed ? 'right' : 'bottom';
+        donutChart.options.plugins.legend.position = legendPos(detailed);
         donutChart.options.plugins.legend.labels.font = { size: detailed ? 9 : 11 };
         if (_dashData) updateAllocationChart(_dashData);
     }
