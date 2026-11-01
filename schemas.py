@@ -6,7 +6,7 @@ functions; defining Pydantic response models for them would be redundant.
 """
 from __future__ import annotations
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # ── Cash Flow ─────────────────────────────────────────────────────────────────
@@ -28,6 +28,12 @@ class BudgetEntryIn(BaseModel):
 class NameIn(BaseModel):
     """Generic {name} body used by every CRUD-create endpoint."""
     name: str
+
+
+class AuthIn(BaseModel):
+    """Body for /api/auth/signup and /api/auth/login."""
+    email:    str = Field(max_length=320)
+    password: str = Field(min_length=1, max_length=128)
 
 
 class MonthlyBudgetIn(BaseModel):
