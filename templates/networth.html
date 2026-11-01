@@ -407,6 +407,7 @@
         }
         .btn-ok:hover { opacity: 0.85; }
     </style>
+    <link rel="stylesheet" href="/responsive.css"/>
 </head>
 <body>
 
@@ -426,6 +427,8 @@
     <a class="nav-tab"        href="/forecast">⛅ Forecasting</a>
     <a class="nav-tab"        href="/chatbot">🤖 Chatbot</a>
 </nav>
+
+<script>document.querySelector('.nav-tab.active')?.scrollIntoView({inline:'center', block:'nearest'})</script>
 
 <div class="sub-nav">
     <div class="year-section">

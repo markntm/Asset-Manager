@@ -178,6 +178,7 @@
         .empty-row a { color: var(--accent); text-decoration: none; }
         .empty-row a:hover { text-decoration: underline; }
     </style>
+    <link rel="stylesheet" href="/responsive.css"/>
 </head>
 <body>
 
@@ -197,6 +198,8 @@
     <a class="nav-tab"        href="/forecast">⛅ Forecasting</a>
     <a class="nav-tab"        href="/chatbot">🤖 Chatbot</a>
 </nav>
+
+<script>document.querySelector('.nav-tab.active')?.scrollIntoView({inline:'center', block:'nearest'})</script>
 
 <main>
 
@@ -319,6 +322,7 @@
         return (n < 0 ? '−$' : '$') + Math.abs(Math.round(n)).toLocaleString('en-US');
     };
     const setTxt = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    const legendPos = detailed => (detailed && !window.matchMedia('(max-width: 700px)').matches) ? 'right' : 'bottom';
 
     function setBadge(id, value) {
         const el = document.getElementById(id);

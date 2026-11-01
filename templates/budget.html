@@ -238,6 +238,7 @@
         .clr-green  { color: var(--green);  }
         .clr-amber  { color: var(--amber);  }
     </style>
+    <link rel="stylesheet" href="/responsive.css"/>
 </head>
 <body>
 
@@ -259,6 +260,8 @@
     <a class="nav-tab"        href="/forecast">⛅ Forecasting</a>
     <a class="nav-tab"        href="/chatbot">🤖 Chatbot</a>
 </nav>
+
+<script>document.querySelector('.nav-tab.active')?.scrollIntoView({inline:'center', block:'nearest'})</script>
 
 <main>
     <div id="cardsEl"></div>

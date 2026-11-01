@@ -91,6 +91,10 @@ def logout(request: Request):
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
 
+@app.get("/responsive.css", include_in_schema=False)
+def responsive_css():
+    return FileResponse(STATIC_DIR / "responsive.css", media_type="text/css")
+
 
 # ── API routers ───────────────────────────────────────────────────────────────
 

@@ -393,6 +393,7 @@
         }
         .btn-ok:hover { opacity: 0.85; }
     </style>
+    <link rel="stylesheet" href="/responsive.css"/>
 </head>
 <body>
 
@@ -414,6 +415,8 @@
     <a class="nav-tab"        href="/forecast">⛅ Forecasting</a>
     <a class="nav-tab"        href="/chatbot">🤖 Chatbot</a>
 </nav>
+
+<script>document.querySelector('.nav-tab.active')?.scrollIntoView({inline:'center', block:'nearest'})</script>
 
 <!-- ── Sub Nav ─────────────────────────────────────────────────── -->
 <div class="sub-nav">
@@ -539,6 +542,7 @@
         .replace(/&/g,'&amp;').replace(/</g,'&lt;')
         .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const getV   = (obj, mi) => (obj && obj[mi] != null) ? parseFloat(obj[mi]) || 0 : 0;
+    const legendPos = detailed => (detailed && !window.matchMedia('(max-width: 700px)').matches) ? 'right' : 'bottom';
 
     function makeDelta(curr, prev, positiveIsGood = true) {
         if (curr == null || prev == null)
@@ -582,7 +586,7 @@
             b.classList.toggle('active', i === (detailed ? 1 : 0));
         });
         if (yearPie) {
-            yearPie.options.plugins.legend.position = detailed ? 'right' : 'bottom';
+            yearPie.options.plugins.legend.position = legendPos(detailed);
             yearPie.options.plugins.legend.labels.font = { size: detailed ? 9 : 11 };
         }
         updateYearCharts();
@@ -594,7 +598,7 @@
             b.classList.toggle('active', i === (detailed ? 1 : 0));
         });
         if (monthPie) {
-            monthPie.options.plugins.legend.position = detailed ? 'right' : 'bottom';
+            monthPie.options.plugins.legend.position = legendPos(detailed);
             monthPie.options.plugins.legend.labels.font = { size: detailed ? 9 : 11 };
         }
         if (typeof STATE.activeView === 'number') updateMonthChart(STATE.activeView);
