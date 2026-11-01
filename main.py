@@ -13,16 +13,15 @@ HTML pages are served from ./static/.  The four existing pages
 
 Any page file that doesn't exist yet returns a simple placeholder.
 """
+
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
-from pathlib import Path
-
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, HTMLResponse
-
 import uvicorn
-import database.database as database
+# from contextlib import asynccontextmanager
+from pathlib import Path
+from fastapi import FastAPI
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from database.base import NotFound
 from routers import cashflow, networth, budget, dashboard
 
 STATIC_DIR = Path(__file__).parent / "templates"
@@ -32,16 +31,11 @@ _PLACEHOLDER = (
     "<h2>⛅ Coming soon</h2><p><a href='/'>← Dashboard</a></p></body></html>"
 )
 
+app = FastAPI(title="FinTrack", version="1.0")
 
-# ── Startup / shutdown ────────────────────────────────────────────────────────
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    database.init_db()
-    yield
-
-
-app = FastAPI(title="FinTrack", version="1.0", lifespan=lifespan)
+@app.exception_handler(NotFound)
+async def _not_found(request, exc):
+    return JSONResponse({"detail": "Not found"}, status_code=404)
 
 
 # ── Page routes ───────────────────────────────────────────────────────────────

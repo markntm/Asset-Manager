@@ -7,20 +7,21 @@ page's per-month budget column.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-import database.database as db
+from auth import current_user_id
+from database import budget as db
 from schemas import MonthlyBudgetIn
 
 router = APIRouter(tags=["budget"])
 
 
 @router.get("/categories")
-def get_budget_categories():
-    return {"categories": db.get_budget_categories()}
+def get_budget_categories(user_id: str = Depends(current_user_id)):
+    return {"categories": db.get_budget_categories(user_id)}
 
 
 @router.put("/category/{category_id}")
-def put_budget_category(category_id: str, body: MonthlyBudgetIn):
-    db.upsert_budget_target(category_id, body.monthly_budget)
+def put_budget_category(category_id: str, body: MonthlyBudgetIn, user_id: str = Depends(current_user_id)):
+    db.upsert_budget_target(user_id, category_id, body.monthly_budget)
     return {"ok": True}
