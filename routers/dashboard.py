@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-import database.database as db
+from auth import current_user_id
+from database import cashflow as cf_db
+from database import networth as nw_db
 from calculations.cashflow import compute_dashboard_cashflow
 from calculations.networth import compute_dashboard_networth, latest_filled_month
 
@@ -89,13 +91,13 @@ def _build_accounts(nw_data: dict, lfm: int | None, nw_total: float) -> list[dic
 
 
 @router.get("/summary")
-def get_dashboard_summary():
+def get_dashboard_summary(user_id: str = Depends(current_user_id)):
     today             = date.today()
     year              = today.year
     current_month_idx = today.month - 1   # 0-based
 
-    nw_data = db.get_networth_data(year)
-    cf_data = db.get_cashflow_data(year)
+    nw_data = nw_db.get_networth_data(user_id, year)
+    cf_data = cf_db.get_cashflow_data(user_id, year)
 
     nw = compute_dashboard_networth(
         nw_data["cash"], nw_data["investments"], nw_data["assets"]

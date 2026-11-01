@@ -1,5 +1,13 @@
+# deployment
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 jinja2>=3.1.0
 python-multipart>=0.0.9
 pydantic>=2.0.0
+
+# database
+sqlalchemy>=2.0
+psycopg[binary]>=3.2
+python-dotenv>=1.0
+argon2-cffi
+itsdangerous
