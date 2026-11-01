@@ -45,6 +45,16 @@ def get_networth_data(user_id: str, year: int) -> dict:
         }
 
 
+def get_years(user_id: str) -> list[int]:
+    with SessionLocal.begin() as s:
+        qs = [select(entry.year)
+              .join(leaf, getattr(entry, entry_fk) == leaf.id)
+              .join(root, getattr(leaf, fk) == root.id)
+              .where(root.user_id == user_id)
+              for leaf, fk, root, entry, entry_fk in _LEAVES]
+        return sorted(r[0] for r in s.execute(qs[0].union(*qs[1:])))
+
+
 # ── Cash ──
 def add_cash_institution(user_id, name):
     return add_root(CashInstitution, user_id, name)

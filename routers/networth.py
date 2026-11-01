@@ -23,6 +23,10 @@ router = APIRouter(tags=["networth"])
 def get_networth_data(year: int, user_id: str = Depends(current_user_id)):
     return db.get_networth_data(user_id, year)
 
+@router.get("/years")
+def get_years(user_id: str = Depends(current_user_id)):
+    return {"years": db.get_years(user_id)}
+
 
 # ── Unified cell save (cash accounts, holdings, asset items) ─────────────────
 

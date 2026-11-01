@@ -1221,6 +1221,27 @@
         switchView(STATE.activeView);
     }
 
+    let KNOWN_YEARS = [];
+
+    function renderYearPicker() {
+        const now   = new Date().getFullYear();
+        const years = [...new Set([...KNOWN_YEARS, now, now + 1, STATE.year])].sort((a, b) => b - a);
+        document.getElementById('yearPicker').innerHTML =
+            years.map(y => `<option value="${y}"${y === STATE.year ? ' selected' : ''}>${y}</option>`).join('')
+            + '<option value="__add__">+ Add year…</option>';
+    }
+
+    async function onYearPick(val) {
+        if (val === '__add__') {
+            const y = parseInt(prompt('Enter a year (e.g. 2023):'), 10);
+            if (!(y >= 2000 && y <= 2100)) return renderYearPicker();
+            KNOWN_YEARS.push(y);
+            val = y;
+        }
+        await changeYear(val);
+        renderYearPicker();
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  INIT
     // ════════════════════════════════════════════════════════════════
@@ -1230,14 +1251,9 @@
 
         const cur = new Date().getFullYear();
         STATE.year = cur;
-        const picker = document.getElementById('yearPicker');
-        for (let y = cur + 2; y >= cur - 5; y--) {
-            const o = document.createElement('option');
-            o.value = y; o.textContent = y;
-            if (y === cur) o.selected = true;
-            picker.appendChild(o);
-        }
-        picker.addEventListener('change', () => changeYear(picker.value));
+        KNOWN_YEARS = (await apiFetch('/api/cashflow/years'))?.years || [];
+        renderYearPicker();
+        document.getElementById('yearPicker').addEventListener('change', e => onYearPick(e.target.value));
         setTxt('yearViewBtn', cur);
 
         document.getElementById('yearViewBtn').addEventListener('click', () => switchView('year'));
