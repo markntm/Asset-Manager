@@ -5,6 +5,7 @@ Response shapes are plain dicts returned directly from the calculation
 functions; defining Pydantic response models for them would be redundant.
 """
 from __future__ import annotations
+from datetime import date
 from typing import Optional
 from pydantic import BaseModel, Field
 
@@ -64,3 +65,15 @@ class HoldingIn(BaseModel):
 class HoldingQtyIn(BaseModel):
     """Body for updating a holding's quantity without touching monthly values."""
     quantity: float
+
+
+# ── Transactions ──────────────────────────────────────────────────────────────
+
+class TxnIn(BaseModel):
+    date:                   date
+    merchant:               str = Field(min_length=1, max_length=200)
+    amount:                 float
+    is_transfer:            bool = False
+    institution_id:         Optional[str] = None
+    income_category_id:     Optional[str] = None
+    expense_subcategory_id: Optional[str] = None

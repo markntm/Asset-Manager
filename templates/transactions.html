@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>FinTrack — Transactions</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root { --bg:#0f1117; --surface:#1a1d27; --surface-2:#222536; --border:#2e3249; --accent:#6c63ff;
+            --green:#4ade80; --red:#f87171; --text:#e2e8f0; --muted:#8892a4; --radius:12px; }
+        body { font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+        header { background:var(--surface); border-bottom:1px solid var(--border); padding:0 32px; height:64px;
+            display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+        .logo { font-size:1.2rem; font-weight:700; } .logo span { color:var(--accent); }
+        .header-date { font-size:0.8rem; color:var(--muted); background:var(--surface-2); border:1px solid var(--border); padding:5px 14px; border-radius:20px; }
+        .main-nav { background:var(--surface); border-bottom:1px solid var(--border); padding:0 32px; display:flex; align-items:stretch; position:sticky; top:64px; z-index:99; height:49px; }
+        .nav-tab { padding:0 20px; height:49px; color:var(--muted); font-size:0.875rem; font-weight:500; position:relative; text-decoration:none; display:inline-flex; align-items:center; white-space:nowrap; transition:color 0.2s; }
+        .nav-tab:hover { color:var(--text); } .nav-tab.active { color:var(--accent); }
+        .nav-tab.active::after { content:''; position:absolute; bottom:0; left:0; right:0; height:2px; background:var(--accent); border-radius:2px 2px 0 0; }
+        main { padding:24px 32px; max-width:1400px; margin:0 auto; }
+
+        .toolbar { display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+        .toolbar .count { color:var(--muted); font-size:0.8rem; margin-left:auto; }
+        select, .field input, .field select { background:var(--surface-2); border:1px solid var(--border); color:var(--text); padding:8px 12px;
+            border-radius:8px; font-size:0.85rem; font-family:inherit; outline:none; transition:border-color 0.2s; }
+        select:focus, .field input:focus { border-color:var(--accent); }
+        .btn-ok { padding:8px 18px; background:var(--accent); border:none; color:#fff; border-radius:8px; font-size:0.875rem; font-weight:600; cursor:pointer; font-family:inherit; }
+        .btn-ok:hover { opacity:0.85; }
+        .btn-cancel { padding:8px 16px; background:none; border:1px solid var(--border); color:var(--muted); border-radius:8px; font-size:0.875rem; cursor:pointer; font-family:inherit; }
+
+        .txn-panel { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); overflow-x:auto; }
+        table { width:100%; border-collapse:collapse; }
+        thead th { text-align:left; padding:10px 20px; font-size:0.7rem; font-weight:600; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted); border-bottom:1px solid var(--border); white-space:nowrap; }
+        tbody td { padding:12px 20px; font-size:0.86rem; border-bottom:1px solid var(--border); }
+        tbody tr:last-child td { border-bottom:none; } tbody tr:hover td { background:var(--surface-2); }
+        .r { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; font-weight:600; }
+        .muted { color:var(--muted); } .dlt-up { color:var(--green); } .dlt-dn { color:var(--red); } .dlt-nil { color:var(--muted); }
+        .tag { font-size:0.68rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; padding:2px 8px; border-radius:20px;
+            background:rgba(108,99,255,0.12); color:var(--accent); border:1px solid rgba(108,99,255,0.25); }
+        .row-actions { text-align:right; white-space:nowrap; opacity:0; transition:opacity 0.15s; }
+        tbody tr:hover .row-actions { opacity:1; }
+        @media (hover:none) { .row-actions { opacity:1; } }
+        .row-actions button { background:none; border:none; color:var(--muted); cursor:pointer; font-size:0.95rem; padding:4px 7px; border-radius:4px; }
+        .row-actions button:hover { color:var(--accent); } .row-actions .del:hover { color:var(--red); }
+        .empty { text-align:center; color:var(--muted); font-style:italic; padding:40px 20px; }
+
+        .overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); backdrop-filter:blur(3px); z-index:200; align-items:center; justify-content:center; }
+        .overlay.open { display:flex; }
+        .modal { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:26px; width:440px; max-width:90vw; box-shadow:0 20px 60px rgba(0,0,0,0.5); }
+        .modal h3 { font-size:1rem; font-weight:700; margin-bottom:18px; }
+        .field { margin-bottom:14px; }
+        .field label { display:block; font-size:0.7rem; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:6px; }
+        .field input:not([type=checkbox]), .field select { width:100%; }
+        .check { display:flex; align-items:center; gap:8px; font-size:0.85rem; margin-bottom:14px; cursor:pointer; }
+        .hint { font-size:0.72rem; color:var(--muted); margin-top:5px; }
+        .err { min-height:1.2em; color:var(--red); font-size:0.8rem; }
+        .modal-btns { display:flex; justify-content:flex-end; gap:10px; margin-top:12px; }
+    </style>
+    <link rel="stylesheet" href="/responsive.css"/>
+</head>
+<body>
+
+<header>
+    <div class="logo">Fin<span>Track</span></div>
+    <div style="display:flex; gap:10px; align-items:center">
+        <div class="header-date" id="hDate"></div>
+        <a class="header-date" href="/logout" style="text-decoration:none">Sign out</a>
+    </div>
+</header>
+
+<nav class="main-nav">
+    <a class="nav-tab"        href="/">📊 Dashboard</a>
+    <a class="nav-tab"        href="/cashflow">💸 Cash Flow</a>
+    <a class="nav-tab active" href="/transactions">🧾 Transactions</a>
+    <a class="nav-tab"        href="/networth">🏦 Net Worth</a>
+    <a class="nav-tab"        href="/budget">📋 Budgeting &amp; Planning</a>
+    <a class="nav-tab"        href="/forecast">⛅ Forecasting</a>
+    <a class="nav-tab"        href="/chatbot">🤖 Chatbot</a>
+</nav>
+<script>document.querySelector('.nav-tab.active')?.scrollIntoView({inline:'center', block:'nearest'})</script>
+
+<main>
+    <div class="toolbar">
+        <select id="filterBank"></select>
+        <select id="sortBy">
+            <option value="date-desc">Date: newest first</option>
+            <option value="date-asc">Date: oldest first</option>
+            <option value="amount-desc">Amount: high → low</option>
+            <option value="amount-asc">Amount: low → high</option>
+        </select>
+        <span class="count" id="count"></span>
+        <button class="btn-ok" onclick="openModal()">+ Add Transaction</button>
+    </div>
+    <div class="txn-panel">
+        <table>
+            <thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th>Bank</th><th class="r">Amount</th><th></th></tr></thead>
+            <tbody id="txnBody"></tbody>
+        </table>
+    </div>
+</main>
+
+<div class="overlay" id="overlay">
+    <div class="modal">
+        <h3 id="mTitle">Add Transaction</h3>
+        <div class="field"><label>Date</label><input type="date" id="mDate"/></div>
+        <div class="field"><label>Merchant</label><input type="text" id="mMerchant" placeholder="e.g. Costco"/></div>
+        <div class="field">
+            <label>Amount</label>
+            <input type="number" id="mAmount" step="0.01" placeholder="-45.20"/>
+            <div class="hint">Negative = money out, positive = money in.</div>
+        </div>
+        <div class="field"><label>Bank</label><select id="mBank"></select></div>
+        <label class="check"><input type="checkbox" id="mTransfer" onchange="syncTransfer()"/> Transfer between my own accounts (excluded from cash flow)</label>
+        <div class="field"><label>Category</label><select id="mCat"></select></div>
+        <div class="err" id="mErr"></div>
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+            <button class="btn-ok" onclick="saveTxn()">Save</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const $   = id => document.getElementById(id);
+    const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const money = n => (n < 0 ? '−$' : '+$') + Math.abs(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+    const fmtDate = iso => { const [y,m,d] = iso.split('-'); return new Date(y, m-1, d).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}); };
+
+    let STATE = { txns: [], banks: [], income: [], expenses: [] };
+    let editId = null;
+
+    async function apiFetch(path, opts = {}) {
+        try {
+            const r = await fetch(path, { headers: {'Content-Type':'application/json'}, ...opts });
+            if (r.status === 401) { location.href = '/login'; return null; }
+            if (!r.ok) { console.error(`API ${r.status}:`, path); return null; }
+            return r.status === 204 ? true : r.json();
+        } catch (e) { console.warn(e.message); return null; }
+    }
+
+    // ── Lookups ──────────────────────────────────────────────────────
+    const bankName = id => STATE.banks.find(b => b.id === id)?.name ?? '—';
+
+    function catLabel(t) {
+        if (t.is_transfer) return '<span class="tag">Transfer</span>';
+        if (t.income_category_id)
+            return esc(STATE.income.find(c => c.id === t.income_category_id)?.name ?? '—');
+        for (const c of STATE.expenses) {
+            const sc = c.subcategories.find(s => s.id === t.expense_subcategory_id);
+            if (sc) return `${esc(c.name)} › ${esc(sc.name)}`;
+        }
+        return '<span class="dlt-nil">Uncategorized</span>';
+    }
+
+    // ── Render ───────────────────────────────────────────────────────
+    function render() {
+        const bank = $('filterBank').value;
+        const [key, dir] = $('sortBy').value.split('-');
+        const sgn = dir === 'asc' ? 1 : -1;
+        const rows = STATE.txns
+            .filter(t => !bank || t.institution_id === bank)
+            .sort((a, b) => (key === 'amount' ? sgn * (a.amount - b.amount) : sgn * a.date.localeCompare(b.date)));
+
+        $('count').textContent = `${rows.length} transaction${rows.length === 1 ? '' : 's'}`;
+        $('txnBody').innerHTML = rows.length ? rows.map(t => `
+        <tr>
+            <td class="muted">${fmtDate(t.date)}</td>
+            <td>${esc(t.merchant)}</td>
+            <td>${catLabel(t)}</td>
+            <td class="muted">${esc(bankName(t.institution_id))}</td>
+            <td class="r ${t.is_transfer ? 'dlt-nil' : t.amount < 0 ? 'dlt-dn' : 'dlt-up'}">${money(t.amount)}</td>
+            <td class="row-actions">
+                <button onclick="openModal('${t.id}')" title="Edit">✎</button>
+                <button class="del" onclick="doDelete('${t.id}')" title="Delete">🗑</button>
+            </td>
+        </tr>`).join('')
+            : '<tr><td colspan="6" class="empty">No transactions yet — add one above.</td></tr>';
+    }
+
+    function fillSelects() {
+        const cur = $('filterBank').value;
+        $('filterBank').innerHTML = '<option value="">All banks</option>' +
+            STATE.banks.map(b => `<option value="${b.id}">${esc(b.name)}</option>`).join('');
+        $('filterBank').value = cur;
+
+        $('mBank').innerHTML = '<option value="">— None —</option>' +
+            STATE.banks.map(b => `<option value="${b.id}">${esc(b.name)}</option>`).join('');
+
+        $('mCat').innerHTML = '<option value="">Uncategorized</option>'
+            + (STATE.income.length
+                ? `<optgroup label="Income">${STATE.income.map(c => `<option value="inc:${c.id}">${esc(c.name)}</option>`).join('')}</optgroup>` : '')
+            + STATE.expenses.filter(c => c.subcategories.length).map(c =>
+                `<optgroup label="${esc(c.name)}">${c.subcategories.map(s => `<option value="exp:${s.id}">${esc(s.name)}</option>`).join('')}</optgroup>`).join('');
+    }
+
+    // ── Modal ────────────────────────────────────────────────────────
+    function syncTransfer() { $('mCat').disabled = $('mTransfer').checked; }
+
+    function openModal(id = null) {
+        editId = id;
+        const t = id ? STATE.txns.find(x => x.id === id) : null;
+        $('mTitle').textContent  = t ? 'Edit Transaction' : 'Add Transaction';
+        $('mDate').value         = t ? t.date : new Date().toLocaleDateString('en-CA');
+        $('mMerchant').value     = t ? t.merchant : '';
+        $('mAmount').value       = t ? t.amount : '';
+        $('mBank').value         = t?.institution_id ?? '';
+        $('mTransfer').checked   = !!t?.is_transfer;
+        $('mCat').value          = t?.income_category_id ? 'inc:' + t.income_category_id
+            : t?.expense_subcategory_id ? 'exp:' + t.expense_subcategory_id : '';
+        $('mErr').textContent    = '';
+        syncTransfer();
+        $('overlay').classList.add('open');
+        setTimeout(() => $('mMerchant').focus(), 40);
+    }
+    function closeModal() { $('overlay').classList.remove('open'); }
+
+    async function saveTxn() {
+        const date = $('mDate').value, merchant = $('mMerchant').value.trim(), amount = parseFloat($('mAmount').value);
+        if (!date || !merchant || isNaN(amount)) { $('mErr').textContent = 'Date, merchant and amount are required.'; return; }
+        const xfer = $('mTransfer').checked, cat = xfer ? '' : $('mCat').value;
+        const body = {
+            date, merchant, amount, is_transfer: xfer,
+            institution_id:         $('mBank').value || null,
+            income_category_id:     cat.startsWith('inc:') ? cat.slice(4) : null,
+            expense_subcategory_id: cat.startsWith('exp:') ? cat.slice(4) : null,
+        };
+        const r = await apiFetch(editId ? `/api/transactions/${editId}` : '/api/transactions',
+            { method: editId ? 'PUT' : 'POST', body: JSON.stringify(body) });
+        if (!r) { $('mErr').textContent = 'Could not save. Check the fields and try again.'; return; }
+        STATE.txns = editId ? STATE.txns.map(t => t.id === editId ? r : t) : [r, ...STATE.txns];
+        closeModal(); render();
+    }
+
+    async function doDelete(id) {
+        if (!confirm('Delete this transaction?')) return;
+        if (await apiFetch(`/api/transactions/${id}`, { method: 'DELETE' })) {
+            STATE.txns = STATE.txns.filter(t => t.id !== id);
+            render();
+        }
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────
+    (async function init() {
+        $('hDate').textContent = new Date().toLocaleDateString('en-US', { month:'long', year:'numeric' });
+        const data = await apiFetch('/api/transactions');
+        if (data) STATE = { txns: data.transactions, banks: data.banks, income: data.income, expenses: data.expenses };
+        fillSelects();
+        $('filterBank').addEventListener('change', render);
+        $('sortBy').addEventListener('change', render);
+        $('overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+        render();
+    })();
+</script>
+</body>
+</html>
