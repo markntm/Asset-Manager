@@ -183,7 +183,10 @@
 
 <header>
     <div class="logo">Fin<span>Track</span></div>
-    <div class="header-date" id="hDate"></div>
+    <div style="display:flex; gap:10px; align-items:center">
+        <div class="header-date" id="hDate"></div>
+        <a class="header-date" href="/logout" style="text-decoration:none">Sign out</a>
+    </div>
 </header>
 
 <nav class="main-nav">
@@ -487,6 +490,7 @@
         let data;
         try {
             const r = await fetch('/api/dashboard/summary');
+            if (r.status === 401) { location.href = '/login'; return; }
             if (!r.ok) throw new Error(r.status);
             data = await r.json();
         } catch (e) {

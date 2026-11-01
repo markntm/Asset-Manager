@@ -9,5 +9,5 @@ pydantic>=2.0.0
 sqlalchemy>=2.0
 psycopg[binary]>=3.2
 python-dotenv>=1.0
-argon2-cffi
-itsdangerous
+argon2-cffi>=23.1
+itsdangerous>=2.1

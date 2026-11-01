@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>FinTrack — Sign in</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:        #0f1117;
+            --surface:   #1a1d27;
+            --surface-2: #222536;
+            --border:    #2e3249;
+            --accent:    #6c63ff;
+            --red:       #f87171;
+            --text:      #e2e8f0;
+            --muted:     #8892a4;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg); color: var(--text); min-height: 100vh;
+        }
+
+        header {
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            padding: 0 32px; height: 64px;
+            display: flex; align-items: center;
+        }
+        .logo { font-size: 1.2rem; font-weight: 700; }
+        .logo span { color: var(--accent); }
+
+        main { display: flex; justify-content: center; padding: 64px 20px; }
+
+        .auth-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 14px; padding: 28px; width: 420px; max-width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+        }
+        .auth-card h1 { font-size: 1.1rem; font-weight: 700; margin-bottom: 4px; }
+        .auth-sub { font-size: 0.8rem; color: var(--muted); margin-bottom: 20px; }
+
+        .mode-tabs { display: flex; gap: 3px; margin-bottom: 22px; }
+        .mode-tab {
+            flex: 1; padding: 6px 10px; border-radius: 20px;
+            border: 1px solid var(--border); background: none;
+            color: var(--muted); font-size: 0.78rem; font-weight: 600;
+            cursor: pointer; transition: all 0.15s; font-family: inherit;
+        }
+        .mode-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .mode-tab:not(.active):hover { border-color: var(--accent); color: var(--accent); }
+
+        .field { margin-bottom: 14px; }
+        .field label {
+            display: block; font-size: 0.7rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--muted); margin-bottom: 6px;
+        }
+        .field input {
+            width: 100%; background: var(--surface-2);
+            border: 1px solid var(--border); color: var(--text);
+            padding: 9px 13px; border-radius: 8px;
+            font-size: 0.875rem; font-family: inherit; outline: none;
+            transition: border-color 0.2s;
+        }
+        .field input:focus { border-color: var(--accent); }
+
+        .btn-ok {
+            width: 100%; margin-top: 6px; padding: 10px 18px;
+            background: var(--accent); border: none; color: #fff;
+            border-radius: 8px; font-size: 0.875rem; font-weight: 600;
+            cursor: pointer; font-family: inherit; transition: opacity 0.15s;
+        }
+        .btn-ok:hover { opacity: 0.85; }
+        .btn-ok:disabled { opacity: 0.5; cursor: default; }
+
+        .auth-error { min-height: 1.2em; font-size: 0.8rem; color: var(--red); margin-top: 12px; }
+        .auth-note  { font-size: 0.72rem; color: var(--muted); margin-top: 14px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo">Fin<span>Track</span></div>
+</header>
+
+<main>
+    <form class="auth-card" id="authForm" novalidate>
+        <h1 id="title"></h1>
+        <p class="auth-sub" id="sub"></p>
+
+        <div class="mode-tabs">
+            <button type="button" class="mode-tab" data-mode="login">Sign in</button>
+            <button type="button" class="mode-tab" data-mode="signup">Create account</button>
+        </div>
+
+        <div class="field">
+            <label for="email">Email</label>
+            <input type="email" id="email" autocomplete="email" autofocus/>
+        </div>
+        <div class="field">
+            <label for="password">Password</label>
+            <input type="password" id="password"/>
+        </div>
+        <div class="field" id="confirmField">
+            <label for="confirm">Confirm password</label>
+            <input type="password" id="confirm" autocomplete="new-password"/>
+        </div>
+
+        <button class="btn-ok" id="submitBtn" type="submit"></button>
+        <div class="auth-error" id="err" role="alert"></div>
+        <p class="auth-note" id="note"></p>
+    </form>
+</main>
+
+<script>
+    const $ = id => document.getElementById(id);
+
+    const COPY = {
+        login:  { title: 'Welcome back',   sub: 'Sign in to see your finances.',
+            btn: 'Sign in',         pw: 'current-password', note: '' },
+        signup: { title: 'Create account', sub: 'Your data is visible only to your account.',
+            btn: 'Create account',  pw: 'new-password',     note: 'Use at least 10 characters.' },
+    };
+
+    let mode = location.pathname === '/signup' ? 'signup' : 'login';
+
+    function setMode(m, updateUrl) {
+        mode = m;
+        const c = COPY[m];
+        document.querySelectorAll('.mode-tab').forEach(b =>
+            b.classList.toggle('active', b.dataset.mode === m));
+        $('title').textContent     = c.title;
+        $('sub').textContent       = c.sub;
+        $('submitBtn').textContent = c.btn;
+        $('note').textContent      = c.note;
+        $('password').autocomplete = c.pw;
+        $('confirmField').style.display = m === 'signup' ? '' : 'none';
+        $('err').textContent = '';
+        document.title = 'FinTrack — ' + c.btn;
+        if (updateUrl) history.replaceState(null, '', '/' + m);
+    }
+
+    document.querySelectorAll('.mode-tab').forEach(b =>
+        b.addEventListener('click', () => setMode(b.dataset.mode, true)));
+
+    $('authForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const fail = msg => { $('err').textContent = msg; };
+        const email = $('email').value.trim(), password = $('password').value;
+        fail('');
+
+        if (!email || !password) return fail('Enter your email and password.');
+        if (mode === 'signup') {
+            if (password.length < 10)           return fail('Password must be at least 10 characters.');
+            if (password !== $('confirm').value) return fail('Passwords do not match.');
+        }
+
+        $('submitBtn').disabled = true;
+        try {
+            const r = await fetch('/api/auth/' + mode, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+            });
+            if (r.ok) { location.href = '/'; return; }
+            const d = await r.json().catch(() => ({}));
+            fail(typeof d.detail === 'string' ? d.detail : 'Please check your input and try again.');
+        } catch {
+            fail('Network error. Please try again.');
+        }
+        $('submitBtn').disabled = false;
+    });
+
+    setMode(mode, false);
+</script>
+</body>
+</html>

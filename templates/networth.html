@@ -412,7 +412,10 @@
 
 <header>
     <div class="logo">Fin<span>Track</span></div>
-    <div class="header-date" id="hDate"></div>
+    <div style="display:flex; gap:10px; align-items:center">
+        <div class="header-date" id="hDate"></div>
+        <a class="header-date" href="/logout" style="text-decoration:none">Sign out</a>
+    </div>
 </header>
 
 <nav class="main-nav">
@@ -600,6 +603,7 @@
             const r = await fetch(path, {
                 headers: { 'Content-Type': 'application/json' }, ...opts,
             });
+            if (r.status === 401) { location.href = '/login'; return null; }
             if (!r.ok) { console.error(`API ${r.status}:`, path); return null; }
             return r.json();
         } catch(e) { console.warn('API stub:', e.message); return null; }
