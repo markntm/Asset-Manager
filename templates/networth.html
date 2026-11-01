@@ -407,6 +407,7 @@
         }
         .btn-ok:hover { opacity: 0.85; }
     </style>
+    <link rel="stylesheet" href="/responsive.css"/>
 </head>
 <body>
 
@@ -426,6 +427,8 @@
     <a class="nav-tab"        href="/forecast">⛅ Forecasting</a>
     <a class="nav-tab"        href="/chatbot">🤖 Chatbot</a>
 </nav>
+
+<script>document.querySelector('.nav-tab.active')?.scrollIntoView({inline:'center', block:'nearest'})</script>
 
 <div class="sub-nav">
     <div class="year-section">
@@ -589,7 +592,7 @@
             b.classList.toggle('active', i === (detailed ? 1 : 0));
         });
         if (pieChart) {
-            pieChart.options.plugins.legend.position = detailed ? 'right' : 'bottom';
+            pieChart.options.plugins.legend.position = legendPos(detailed);
             pieChart.options.plugins.legend.labels.font = { size: detailed ? 9 : 11 };
         }
         if (_lastChartData) updateCharts(_lastChartData);
@@ -1321,6 +1324,27 @@
         switchView(STATE.activeView);
     }
 
+    let KNOWN_YEARS = [];
+
+    function renderYearPicker() {
+        const now   = new Date().getFullYear();
+        const years = [...new Set([...KNOWN_YEARS, now, now + 1, STATE.year])].sort((a, b) => b - a);
+        document.getElementById('yearPicker').innerHTML =
+            years.map(y => `<option value="${y}"${y === STATE.year ? ' selected' : ''}>${y}</option>`).join('')
+            + '<option value="__add__">+ Add year…</option>';
+    }
+
+    async function onYearPick(val) {
+        if (val === '__add__') {
+            const y = parseInt(prompt('Enter a year (e.g. 2023):'), 10);
+            if (!(y >= 2000 && y <= 2100)) return renderYearPicker();
+            KNOWN_YEARS.push(y);
+            val = y;
+        }
+        await changeYear(val);
+        renderYearPicker();
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  MODAL
     // ════════════════════════════════════════════════════════════════
@@ -1392,14 +1416,9 @@
 
         const cur    = new Date().getFullYear();
         STATE.year   = cur;
-        const picker = document.getElementById('yearPicker');
-        for (let y = cur + 2; y >= cur - 5; y--) {
-            const o = document.createElement('option');
-            o.value = y; o.textContent = y;
-            if (y === cur) o.selected = true;
-            picker.appendChild(o);
-        }
-        picker.addEventListener('change', () => changeYear(picker.value));
+        KNOWN_YEARS = (await apiFetch('/api/networth/years'))?.years || [];
+        renderYearPicker();
+        document.getElementById('yearPicker').addEventListener('change', e => onYearPick(e.target.value));
         setTxt('yearViewBtn', cur);
 
         document.getElementById('yearViewBtn').addEventListener('click', () => switchView('year'));

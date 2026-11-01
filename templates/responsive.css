@@ -1,0 +1,75 @@
+/* Shared mobile / landscape rules. Link AFTER each page's <style> block. */
+
+.modal { max-height: 90vh; overflow-y: auto; }
+
+/* Nav scrolls sideways instead of overflowing the page */
+.main-nav { overflow-x: auto; scrollbar-width: none; }
+.main-nav::-webkit-scrollbar { display: none; }
+
+/* Touch: no hover, so always show delete buttons. 16px inputs stop iOS zoom-on-focus. */
+@media (hover: none)     { .btn-del { color: var(--muted); padding: 8px 10px; } }
+@media (pointer: coarse) { input, select { font-size: 16px !important; } }
+
+/* Portrait phones */
+@media (max-width: 700px) {
+    header, .main-nav, .sub-nav { padding-left: 14px; padding-right: 14px; }
+    main { padding: 16px 14px; }
+    .nav-tab { padding: 0 14px; font-size: 0.82rem; }
+
+    /* Cards */
+    .cards-row { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .sum-card, .card { padding: 14px; }
+    .sc-value { font-size: 1.2rem; }
+    .card-value { font-size: 1.3rem; }
+    .cards-row .card:first-child { grid-column: 1 / -1; }   /* dashboard net-worth card full width */
+
+    /* Block / category headers: title on top, stat boxes on a second line */
+    .block-header, .exp-cat-header, .inst-header, .nw-total-bar {
+        flex-wrap: wrap; padding-left: 14px; padding-right: 14px;
+    }
+    .block-stats, .cat-stats { width: 100%; margin-left: 0; }
+    .cat-stats { order: 3; }
+    .stat-box, .cat-stat { flex: 1; min-width: 0; padding-left: 10px; padding-right: 10px; }
+
+    /* Data rows: name on its own line, then input + delta + delete */
+    .inc-cat-row, .exp-subcat-row, .leaf-row { flex-wrap: wrap; gap: 8px 10px; padding-right: 14px; }
+    .inc-cat-row { padding-left: 14px; }
+    .exp-subcat-row, .leaf-row { padding-left: 28px; }
+    .row-name, .holding-meta { flex: 1 1 100%; white-space: normal; }
+    .amount-input { flex: 1 1 110px; width: auto; min-width: 0; }
+    .row-delta { min-width: 0; flex: 0 0 auto; }
+    .add-row { padding-left: 14px; }
+    .add-row.indented { padding-left: 28px; }
+
+    /* Charts */
+    .cp-head, .panel-head { flex-wrap: wrap; }
+    .chart-panel, .panel { padding: 16px 14px; }
+    .chart-wrap, .chart-wrap.tall { height: 240px; }
+
+    /* Dashboard table: scroll if needed, drop the Type column */
+    .table-panel { overflow-x: auto; }
+    .table-panel-head { padding: 14px; }
+    thead th, tbody td { padding: 10px 12px; }
+    thead th:nth-child(2), tbody td:nth-child(2) { display: none; }
+
+    /* Budget page: stack each row instead of a 6-column grid */
+    .col-headers, .row-arrow { display: none; }
+    .budget-row { grid-template-columns: 22px 1fr auto; gap: 8px 12px; padding: 12px 14px; }
+    .cat-index    { grid-column: 1; grid-row: 1; }
+    .cat-name     { grid-column: 2; grid-row: 1; white-space: normal; }
+    .status-pill  { grid-column: 3; grid-row: 1; padding: 4px 10px; }
+    .monthly-wrap { grid-column: 2 / -1; grid-row: 2; justify-content: flex-start; }
+    .monthly-wrap .amount-input { flex: 1; }
+    .annual-box   { grid-column: 2 / -1; grid-row: 3; flex-direction: row; align-items: center; justify-content: space-between; }
+    .annual-lbl   { margin-bottom: 0; }
+}
+
+@media (max-width: 480px) { #hDate { display: none; } }
+
+/* Phones in landscape (and any short screen): stop three sticky bars eating the viewport */
+@media (max-width: 700px), (max-height: 500px) {
+    header { position: static; }
+    .main-nav { top: 0; }
+    .sub-nav { top: 49px; }
+}
+@media (max-height: 500px) { .chart-wrap, .chart-wrap.tall { height: 220px; } }

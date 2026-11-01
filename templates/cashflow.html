@@ -393,6 +393,7 @@
         }
         .btn-ok:hover { opacity: 0.85; }
     </style>
+    <link rel="stylesheet" href="/responsive.css"/>
 </head>
 <body>
 
@@ -414,6 +415,8 @@
     <a class="nav-tab"        href="/forecast">⛅ Forecasting</a>
     <a class="nav-tab"        href="/chatbot">🤖 Chatbot</a>
 </nav>
+
+<script>document.querySelector('.nav-tab.active')?.scrollIntoView({inline:'center', block:'nearest'})</script>
 
 <!-- ── Sub Nav ─────────────────────────────────────────────────── -->
 <div class="sub-nav">
@@ -539,6 +542,7 @@
         .replace(/&/g,'&amp;').replace(/</g,'&lt;')
         .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     const getV   = (obj, mi) => (obj && obj[mi] != null) ? parseFloat(obj[mi]) || 0 : 0;
+    const legendPos = detailed => (detailed && !window.matchMedia('(max-width: 700px)').matches) ? 'right' : 'bottom';
 
     function makeDelta(curr, prev, positiveIsGood = true) {
         if (curr == null || prev == null)
@@ -582,7 +586,7 @@
             b.classList.toggle('active', i === (detailed ? 1 : 0));
         });
         if (yearPie) {
-            yearPie.options.plugins.legend.position = detailed ? 'right' : 'bottom';
+            yearPie.options.plugins.legend.position = legendPos(detailed);
             yearPie.options.plugins.legend.labels.font = { size: detailed ? 9 : 11 };
         }
         updateYearCharts();
@@ -594,7 +598,7 @@
             b.classList.toggle('active', i === (detailed ? 1 : 0));
         });
         if (monthPie) {
-            monthPie.options.plugins.legend.position = detailed ? 'right' : 'bottom';
+            monthPie.options.plugins.legend.position = legendPos(detailed);
             monthPie.options.plugins.legend.labels.font = { size: detailed ? 9 : 11 };
         }
         if (typeof STATE.activeView === 'number') updateMonthChart(STATE.activeView);
@@ -1003,7 +1007,7 @@
             options:{
                 responsive:true, maintainAspectRatio:false, cutout:'60%',
                 plugins:{
-                    legend:{ position:'right', labels:{ padding:12, usePointStyle:true, boxWidth:10, font:{size:11} } },
+                    legend:{ position:legendPos(true), labels:{ padding:12, usePointStyle:true, boxWidth:10, font:{size:11} } },
                     tooltip:{ backgroundColor:'#222536', borderColor:'#2e3249', borderWidth:1, callbacks:{
                             label: c => {
                                 const tot = c.dataset.data.reduce((a,b)=>a+b,0);
@@ -1217,6 +1221,27 @@
         switchView(STATE.activeView);
     }
 
+    let KNOWN_YEARS = [];
+
+    function renderYearPicker() {
+        const now   = new Date().getFullYear();
+        const years = [...new Set([...KNOWN_YEARS, now, now + 1, STATE.year])].sort((a, b) => b - a);
+        document.getElementById('yearPicker').innerHTML =
+            years.map(y => `<option value="${y}"${y === STATE.year ? ' selected' : ''}>${y}</option>`).join('')
+            + '<option value="__add__">+ Add year…</option>';
+    }
+
+    async function onYearPick(val) {
+        if (val === '__add__') {
+            const y = parseInt(prompt('Enter a year (e.g. 2023):'), 10);
+            if (!(y >= 2000 && y <= 2100)) return renderYearPicker();
+            KNOWN_YEARS.push(y);
+            val = y;
+        }
+        await changeYear(val);
+        renderYearPicker();
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  INIT
     // ════════════════════════════════════════════════════════════════
@@ -1226,14 +1251,9 @@
 
         const cur = new Date().getFullYear();
         STATE.year = cur;
-        const picker = document.getElementById('yearPicker');
-        for (let y = cur + 2; y >= cur - 5; y--) {
-            const o = document.createElement('option');
-            o.value = y; o.textContent = y;
-            if (y === cur) o.selected = true;
-            picker.appendChild(o);
-        }
-        picker.addEventListener('change', () => changeYear(picker.value));
+        KNOWN_YEARS = (await apiFetch('/api/cashflow/years'))?.years || [];
+        renderYearPicker();
+        document.getElementById('yearPicker').addEventListener('change', e => onYearPick(e.target.value));
         setTxt('yearViewBtn', cur);
 
         document.getElementById('yearViewBtn').addEventListener('click', () => switchView('year'));

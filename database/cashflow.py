@@ -32,6 +32,18 @@ def get_cashflow_data(user_id: str, year: int) -> dict:
         }
 
 
+def get_years(user_id: str) -> list[int]:
+    with SessionLocal.begin() as s:
+        inc = (select(IncomeEntry.year)
+               .join(IncomeCategory, IncomeEntry.category_id == IncomeCategory.id)
+               .where(IncomeCategory.user_id == user_id))
+        exp = (select(ExpenseEntry.year)
+               .join(ExpenseSubcategory, ExpenseEntry.subcategory_id == ExpenseSubcategory.id)
+               .join(ExpenseCategory, ExpenseSubcategory.category_id == ExpenseCategory.id)
+               .where(ExpenseCategory.user_id == user_id))
+        return sorted(r[0] for r in s.execute(inc.union(exp)))
+
+
 # ── CRUD ──
 def add_income_category(user_id, name):
     return add_root(IncomeCategory, user_id, name)

@@ -43,7 +43,7 @@ app.add_middleware(
     secret_key=os.environ["SECRET_KEY"],
     https_only=bool(os.environ.get("VERCEL")),   # Secure cookies on Vercel only (plain http locally)
     same_site="lax",
-    max_age=14 * 24 * 3600,
+    max_age=14 * 24 * 3600, # Consider adding "remember-me" checkbox to login
 )
 
 
@@ -90,6 +90,10 @@ def page_signup(request: Request):    return _public_page(request)
 def logout(request: Request):
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
+
+@app.get("/responsive.css", include_in_schema=False)
+def responsive_css():
+    return FileResponse(STATIC_DIR / "responsive.css", media_type="text/css")
 
 
 # ── API routers ───────────────────────────────────────────────────────────────
