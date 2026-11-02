@@ -144,3 +144,21 @@ class Transaction(IdMixin, Base):
     import_hash: Mapped[Optional[str]] = mapped_column(String(64))   # dedupe key for the future statement reader
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (UniqueConstraint("user_id", "import_hash"),)
+
+class StatementImport(IdMixin, Base):
+    """Totals + checksum of an import. The statement itself is never stored."""
+    __tablename__ = "statement_imports"
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    institution_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("nw_cash_institutions.id", ondelete="SET NULL"))
+    statement_type: Mapped[str] = mapped_column(String(20))
+    period_start: Mapped[Optional[date]] = mapped_column(Date)
+    period_end: Mapped[Optional[date]] = mapped_column(Date)
+    opening_balance: Mapped[Optional[Decimal]] = mapped_column(MONEY)
+    closing_balance: Mapped[Optional[Decimal]] = mapped_column(MONEY)
+    txn_total: Mapped[Decimal] = mapped_column(MONEY)
+    diff: Mapped[Optional[Decimal]] = mapped_column(MONEY)
+    checksum_status: Mapped[str] = mapped_column(String(12))      # ok | mismatch | unverified
+    rows_total: Mapped[int] = mapped_column()
+    rows_imported: Mapped[int] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

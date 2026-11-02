@@ -1,10 +1,10 @@
 """Transactions"""
 
 from sqlalchemy import select
-from database.base import (NotFound, SessionLocal, delete_root, require_child,
-                           require_root, roots)
+from database.base import NotFound, SessionLocal, require_child, require_root, roots
 from database.models import (CashInstitution, ExpenseCategory, ExpenseSubcategory,
                              IncomeCategory, Transaction)
+from database.sync import cell_keys, sync_cashflow
 
 
 def _row(t) -> dict:
@@ -50,12 +50,17 @@ def get_transactions_page(user_id: str) -> dict:
         }
 
 
+def _keys(t) -> set:
+    return cell_keys(t.txn_date, t.is_transfer, t.income_category_id, t.expense_subcategory_id)
+
+
 def create_transaction(user_id: str, f: dict) -> dict:
     with SessionLocal.begin() as s:
         _validate(s, user_id, f)
         t = Transaction(user_id=user_id, **f)
         s.add(t)
         s.flush()
+        sync_cashflow(s, _keys(t))
         return _row(t)
 
 
@@ -65,10 +70,19 @@ def update_transaction(user_id: str, txn_id: str, f: dict) -> dict:
         if t is None:
             raise NotFound(txn_id)
         _validate(s, user_id, f)
+        keys = _keys(t)                      # cells the OLD values fed
         for k, v in f.items():
             setattr(t, k, v)
+        sync_cashflow(s, keys | _keys(t))    # old + new cells
         return _row(t)
 
 
 def delete_transaction(user_id: str, txn_id: str) -> None:
-    delete_root(Transaction, user_id, txn_id)
+    with SessionLocal.begin() as s:
+        t = s.scalar(select(Transaction).where(Transaction.id == txn_id, Transaction.user_id == user_id))
+        if t is None:
+            return
+        keys = _keys(t)
+        s.delete(t)
+        s.flush()
+        sync_cashflow(s, keys)

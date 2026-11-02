@@ -55,6 +55,10 @@
         .hint { font-size:0.72rem; color:var(--muted); margin-top:5px; }
         .err { min-height:1.2em; color:var(--red); font-size:0.8rem; }
         .modal-btns { display:flex; justify-content:flex-end; gap:10px; margin-top:12px; }
+
+        .imports { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:16px; overflow-x:auto; }
+        .imports summary { padding:12px 20px; cursor:pointer; font-size:.85rem; font-weight:600; }
+        .imports table { margin-top:0; }
     </style>
     <link rel="stylesheet" href="/responsive.css"/>
 </head>
@@ -71,15 +75,24 @@
 <nav class="main-nav">
     <a class="nav-tab"        href="/">📊 Dashboard</a>
     <a class="nav-tab"        href="/cashflow">💸 Cash Flow</a>
-    <a class="nav-tab active" href="/transactions">🧾 Transactions</a>
     <a class="nav-tab"        href="/networth">🏦 Net Worth</a>
-    <a class="nav-tab"        href="/budget">📋 Budgeting &amp; Planning</a>
+    <a class="nav-tab"        href="/budget">📋 Budgeting & Planning</a>
+    <a class="nav-tab active" href="/transactions">🧾 Transactions</a>
+    <a class="nav-tab"        href="/statements">📥 Import</a>
     <a class="nav-tab"        href="/forecast">⛅ Forecasting</a>
     <a class="nav-tab"        href="/chatbot">🤖 Chatbot</a>
 </nav>
 <script>document.querySelector('.nav-tab.active')?.scrollIntoView({inline:'center', block:'nearest'})</script>
 
 <main>
+    <details class="imports" id="importsBox" hidden>
+        <summary>Statement imports <span class="muted" id="importsSub"></span></summary>
+        <table>
+            <thead><tr><th>Imported</th><th>Bank</th><th>Period</th><th>Rows</th><th>Checksum</th></tr></thead>
+            <tbody id="importsBody"></tbody>
+        </table>
+    </details>
+
     <div class="toolbar">
         <select id="filterBank"></select>
         <select id="sortBy">
@@ -91,6 +104,7 @@
         <span class="count" id="count"></span>
         <button class="btn-ok" onclick="openModal()">+ Add Transaction</button>
     </div>
+
     <div class="txn-panel">
         <table>
             <thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th>Bank</th><th class="r">Amount</th><th></th></tr></thead>
@@ -237,6 +251,27 @@
             STATE.txns = STATE.txns.filter(t => t.id !== id);
             render();
         }
+    }
+
+    const CS = { ok: ['✔ Verified', 'dlt-up'], mismatch: ['✖ Mismatch', 'dlt-dn'], unverified: ['— Unverified', 'dlt-nil'] };
+
+    async function loadImports() {
+        const d = await apiFetch('/api/statements/imports');
+        if (!d || !d.imports.length) return;
+        $('importsBox').hidden = false;
+        $('importsSub').textContent = `· ${d.imports.length} recent`;
+        $('importsBody').innerHTML = d.imports.map(i => {
+            const [label, cls] = CS[i.checksum_status] || CS.unverified;
+            const tip = i.checksum_status === 'unverified' ? 'No opening/closing balance was available.'
+                : `Opening ${i.opening_balance} · transactions ${i.txn_total} · closing ${i.closing_balance}`;
+            return `<tr>
+            <td class="muted">${fmtDate(i.created_at.slice(0, 10))}</td>
+            <td>${esc(bankName(i.institution_id))}</td>
+            <td class="muted">${i.period_start && i.period_end ? fmtDate(i.period_start) + ' – ' + fmtDate(i.period_end) : '—'}</td>
+            <td class="muted">${i.rows_imported} added${i.rows_total > i.rows_imported ? `, ${i.rows_total - i.rows_imported} skipped` : ''}</td>
+            <td class="${cls}" title="${esc(tip)}"><b>${label}</b>${i.checksum_status === 'mismatch' ? ' (' + money(i.diff) + ')' : ''}</td>
+        </tr>`;
+        }).join('');
     }
 
     // ── Init ─────────────────────────────────────────────────────────

@@ -22,7 +22,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
 from database.base import NotFound
-from routers import cashflow, networth, budget, dashboard, account, transactions
+from routers import cashflow, networth, budget, dashboard, account, transactions, statements
 
 STATIC_DIR = Path(__file__).parent / "templates"
 
@@ -78,6 +78,10 @@ def page_networth(request: Request):
 def page_transactions(request: Request):
     return _page(request, "transactions.html")
 
+@app.get("/statements",    include_in_schema=False)
+def page_statements(request: Request):
+    return _page(request, "statementUpload.html")
+
 @app.get("/budget",        include_in_schema=False)
 def page_budget(request: Request):
     return _page(request, "budget.html")
@@ -114,6 +118,7 @@ app.include_router(dashboard.router,    prefix="/api/dashboard")
 app.include_router(cashflow.router,     prefix="/api/cashflow")
 app.include_router(networth.router,     prefix="/api/networth")
 app.include_router(transactions.router, prefix="/api/transactions")
+app.include_router(statements.router,   prefix="/api/statements")
 app.include_router(budget.router,       prefix="/api/budget")
 app.include_router(account.router,      prefix="/api/auth")
 
