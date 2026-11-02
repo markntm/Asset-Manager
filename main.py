@@ -22,7 +22,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
 from database.base import NotFound
-from routers import cashflow, networth, budget, dashboard, account
+from routers import cashflow, networth, budget, dashboard, account, transactions, statements
 
 STATIC_DIR = Path(__file__).parent / "templates"
 
@@ -62,31 +62,47 @@ def _public_page(request: Request):
     return FileResponse(STATIC_DIR / "login.html")
 
 
-@app.get("/",         include_in_schema=False)
-def page_dashboard(request: Request): return _page(request, "dashboard.html")
+@app.get("/",              include_in_schema=False)
+def page_dashboard(request: Request):
+    return _page(request, "dashboard.html")
 
-@app.get("/cashflow", include_in_schema=False)
-def page_cashflow(request: Request):  return _page(request, "cashflow.html")
+@app.get("/cashflow",      include_in_schema=False)
+def page_cashflow(request: Request):
+    return _page(request, "cashflow.html")
 
-@app.get("/networth", include_in_schema=False)
-def page_networth(request: Request):  return _page(request, "networth.html")
+@app.get("/networth",      include_in_schema=False)
+def page_networth(request: Request):
+    return _page(request, "networth.html")
 
-@app.get("/budget",   include_in_schema=False)
-def page_budget(request: Request):    return _page(request, "budget.html")
+@app.get("/transactions",  include_in_schema=False)
+def page_transactions(request: Request):
+    return _page(request, "transactions.html")
 
-@app.get("/forecast", include_in_schema=False)
-def page_forecast(request: Request):  return _page(request, "forecast.html")
+@app.get("/statements",    include_in_schema=False)
+def page_statements(request: Request):
+    return _page(request, "statementUpload.html")
 
-@app.get("/chatbot",  include_in_schema=False)
-def page_chatbot(request: Request):   return _page(request, "chatbot.html")
+@app.get("/budget",        include_in_schema=False)
+def page_budget(request: Request):
+    return _page(request, "budget.html")
 
-@app.get("/login",    include_in_schema=False)
-def page_login(request: Request):     return _public_page(request)
+@app.get("/forecast",      include_in_schema=False)
+def page_forecast(request: Request):
+    return _page(request, "forecast.html")
 
-@app.get("/signup",   include_in_schema=False)
-def page_signup(request: Request):    return _public_page(request)
+@app.get("/chatbot",       include_in_schema=False)
+def page_chatbot(request: Request):
+    return _page(request, "chatbot.html")
 
-@app.get("/logout",   include_in_schema=False)
+@app.get("/login",         include_in_schema=False)
+def page_login(request: Request):
+    return _public_page(request)
+
+@app.get("/signup",        include_in_schema=False)
+def page_signup(request: Request):
+    return _public_page(request)
+
+@app.get("/logout",        include_in_schema=False)
 def logout(request: Request):
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
@@ -98,11 +114,13 @@ def responsive_css():
 
 # ── API routers ───────────────────────────────────────────────────────────────
 
-app.include_router(dashboard.router, prefix="/api/dashboard")
-app.include_router(cashflow.router,  prefix="/api/cashflow")
-app.include_router(networth.router,  prefix="/api/networth")
-app.include_router(budget.router,    prefix="/api/budget")
-app.include_router(account.router, prefix="/api/auth")
+app.include_router(dashboard.router,    prefix="/api/dashboard")
+app.include_router(cashflow.router,     prefix="/api/cashflow")
+app.include_router(networth.router,     prefix="/api/networth")
+app.include_router(transactions.router, prefix="/api/transactions")
+app.include_router(statements.router,   prefix="/api/statements")
+app.include_router(budget.router,       prefix="/api/budget")
+app.include_router(account.router,      prefix="/api/auth")
 
 if __name__ == "__main__":
     print("Link: " + "http://127.0.0.1:8000/")

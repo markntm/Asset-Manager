@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>FinTrack — Import Statement</title>
+    <style>
+        *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+        [hidden] { display:none !important; }
+        :root { --bg:#0f1117; --surface:#1a1d27; --surface-2:#222536; --border:#2e3249; --accent:#6c63ff;
+            --green:#4ade80; --red:#f87171; --amber:#f59e0b; --text:#e2e8f0; --muted:#8892a4; --radius:12px; }
+        body { font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+        header { background:var(--surface); border-bottom:1px solid var(--border); padding:0 32px; height:64px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+        .logo { font-size:1.2rem; font-weight:700; } .logo span { color:var(--accent); }
+        .header-date { font-size:0.8rem; color:var(--muted); background:var(--surface-2); border:1px solid var(--border); padding:5px 14px; border-radius:20px; }
+        .main-nav { background:var(--surface); border-bottom:1px solid var(--border); padding:0 32px; display:flex; position:sticky; top:64px; z-index:99; height:49px; }
+        .nav-tab { padding:0 20px; height:49px; color:var(--muted); font-size:0.875rem; font-weight:500; position:relative; text-decoration:none; display:inline-flex; align-items:center; white-space:nowrap; }
+        .nav-tab:hover { color:var(--text); } .nav-tab.active { color:var(--accent); }
+        .nav-tab.active::after { content:''; position:absolute; bottom:0; left:0; right:0; height:2px; background:var(--accent); border-radius:2px 2px 0 0; }
+        main { padding:24px 32px; max-width:1400px; margin:0 auto; }
+
+        .drop { border:2px dashed var(--border); border-radius:var(--radius); padding:56px 20px; text-align:center; cursor:pointer; transition:all .15s; background:var(--surface); }
+        .drop:hover, .drop.over { border-color:var(--accent); background:rgba(108,99,255,.06); }
+        .drop .big { font-size:1.05rem; font-weight:600; margin-bottom:6px; } .drop small { color:var(--muted); font-size:.78rem; }
+        .err { color:var(--red); font-size:.85rem; margin-top:12px; min-height:1.2em; }
+
+        .panel { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; margin-bottom:16px; }
+        .panel h3 { font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:12px; }
+        .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; } @media (max-width:860px) { .grid2 { grid-template-columns:1fr; } }
+        .banner { background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.3); color:var(--amber); border-radius:var(--radius); padding:10px 16px; font-size:.82rem; margin-bottom:16px; }
+        .banner div + div { margin-top:4px; }
+
+        select, input[type=text], input[type=number], input[type=date] { background:var(--surface-2); border:1px solid var(--border); color:var(--text); padding:7px 10px; border-radius:8px; font-size:.85rem; font-family:inherit; outline:none; max-width:100%; }
+        select:focus, input:focus { border-color:var(--accent); }
+        .kv { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:6px 0; border-bottom:1px solid rgba(46,50,73,.5); }
+        .kv:last-child { border-bottom:none; } .kv label { font-size:.8rem; color:var(--muted); }
+        .kv .ctl { display:flex; align-items:center; gap:8px; }
+        .tag-missing { display:none; font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--red); background:rgba(248,113,113,.12); border:1px solid rgba(248,113,113,.3); border-radius:20px; padding:1px 8px; white-space:nowrap; }
+        .is-missing > .tag-missing, .is-missing > .ctl > .tag-missing { display:inline-block; }
+        .is-missing input, .is-missing select { border-color:var(--red); }
+        .check { display:flex; gap:8px; align-items:flex-start; font-size:.8rem; margin-top:10px; cursor:pointer; color:var(--muted); }
+
+        .sumrow { display:flex; justify-content:space-between; font-size:.85rem; padding:4px 0; font-variant-numeric:tabular-nums; }
+        .sumrow.total { border-top:1px solid var(--border); margin-top:4px; padding-top:8px; font-weight:700; }
+        .badge { display:inline-block; padding:3px 12px; border-radius:20px; font-size:.75rem; font-weight:700; }
+        .badge.ok { background:rgba(74,222,128,.12); color:var(--green); } .badge.bad { background:rgba(248,113,113,.12); color:var(--red); } .badge.na { background:rgba(136,146,164,.12); color:var(--muted); }
+        .muted { color:var(--muted); } .small { font-size:.78rem; }
+        .btn { padding:8px 16px; border-radius:8px; font-size:.85rem; font-weight:600; cursor:pointer; font-family:inherit; border:1px solid var(--border); background:none; color:var(--muted); }
+        .btn:hover { border-color:var(--accent); color:var(--accent); }
+        .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; } .btn.primary:hover { opacity:.85; color:#fff; } .btn:disabled { opacity:.4; cursor:default; }
+
+        .tbl-wrap { overflow-x:auto; }
+        table { width:100%; border-collapse:collapse; }
+        thead th { text-align:left; padding:8px 10px; font-size:.68rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); border-bottom:1px solid var(--border); white-space:nowrap; }
+        thead th .tag-missing { display:inline-block; margin-left:6px; }
+        tbody td { padding:6px 10px; border-bottom:1px solid var(--border); font-size:.85rem; vertical-align:middle; }
+        tbody tr.dup td { opacity:.45; } tbody tr.dup td.st, tbody tr.dup td:last-child { opacity:1; }
+        td.cell { white-space:nowrap; } td.cell input, td.cell select { width:150px; } td.cell input[type=text] { width:220px; } td.cell input[type=number] { width:110px; text-align:right; }
+        .row-x { background:none; border:none; color:var(--muted); cursor:pointer; font-size:.9rem; } .row-x:hover { color:var(--red); }
+        .bar { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 16px; flex-wrap:wrap; }
+        .actions { display:flex; justify-content:flex-end; gap:10px; margin-top:4px; }
+    </style>
+    <link rel="stylesheet" href="/responsive.css"/>
+</head>
+<body>
+<header>
+    <div class="logo">Fin<span>Track</span></div>
+    <div style="display:flex; gap:10px; align-items:center">
+        <div class="header-date" id="hDate"></div>
+        <a class="header-date" href="/logout" style="text-decoration:none">Sign out</a>
+    </div>
+</header>
+<nav class="main-nav">
+    <a class="nav-tab"        href="/">📊 Dashboard</a>
+    <a class="nav-tab"        href="/cashflow">💸 Cash Flow</a>
+    <a class="nav-tab"        href="/networth">🏦 Net Worth</a>
+    <a class="nav-tab"        href="/budget">📋 Budgeting & Planning</a>
+    <a class="nav-tab"        href="/transactions">🧾 Transactions</a>
+    <a class="nav-tab active" href="/statements">📥 Import</a>
+    <a class="nav-tab"        href="/forecast">⛅ Forecasting</a>
+    <a class="nav-tab"        href="/chatbot">🤖 Chatbot</a>
+</nav>
+<script>document.querySelector('.nav-tab.active')?.scrollIntoView({inline:'center', block:'nearest'})</script>
+
+<main>
+    <section id="dropSec">
+        <div class="drop" id="drop">
+            <div class="big" id="dropMsg">📄 Drop a statement here, or click to browse</div>
+            <small>PDF or CSV · up to 4 MB · read in memory and permanently discarded after you submit</small>
+            <input type="file" id="fileIn" accept=".pdf,.csv,.tsv,.txt" hidden/>
+        </div>
+        <div class="err" id="dropErr"></div>
+    </section>
+
+    <section id="review" hidden>
+        <div class="banner" id="warnBox" hidden></div>
+        <div class="grid2">
+            <div class="panel"><h3>Statement details</h3><div id="metaEl"></div>
+                <label class="check"><input type="checkbox" id="nwChk" onchange="setMeta('update_networth', this.checked)"/>
+                    <span>Also set this account's net-worth balance for the period-end month to the closing balance
+                    (needs an account and a closing balance; not available for credit cards).</span></label>
+            </div>
+            <div class="panel">
+                <h3>Checksum</h3><div id="sumEl"></div>
+                <h3 style="margin-top:18px">Sign convention</h3>
+                <div class="small muted" id="signEl"></div>
+                <button class="btn small" style="margin-top:8px" onclick="invertSigns()">Invert all signs</button>
+            </div>
+        </div>
+        <div class="panel" id="mapPanel" hidden><h3>CSV columns — fix any that were mis-detected</h3><div id="mapEl"></div></div>
+
+        <div class="panel" style="padding:0">
+            <div class="bar">
+                <span class="small muted" id="counts"></span>
+                <button class="btn" onclick="addRow()">+ Add row</button>
+            </div>
+            <div class="tbl-wrap">
+                <table>
+                    <thead><tr>
+                        <th>#</th><th>Date<span class="tag-missing" id="thDate"></span></th>
+                        <th>Merchant<span class="tag-missing" id="thMerchant"></span></th>
+                        <th>Amount<span class="tag-missing" id="thAmount"></span></th>
+                        <th>Category<span class="tag-missing" id="thCat"></span></th>
+                        <th>Bank<span class="tag-missing" id="thBank"></span></th>
+                        <th>Transfer</th><th>Status</th><th></th>
+                    </tr></thead>
+                    <tbody id="revBody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="err" id="submitErr"></div>
+        <div class="actions">
+            <button class="btn" onclick="discard()">Discard statement</button>
+            <button class="btn primary" id="submitBtn" onclick="submitImport()">Verify &amp; import</button>
+        </div>
+    </section>
+
+    <section id="doneSec" class="panel" hidden></section>
+</main>
+
+<script>
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const r2 = n => Math.round(n * 100) / 100;
+    const m2 = n => (n < 0 ? '−$' : '$') + Math.abs(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+    const TYPES = [['checking','Checking / debit'],['savings','Savings'],['credit','Credit card'],['venmo','Venmo / wallet'],['other','Other']];
+    const ROLES = [['date','Date'],['merchant','Merchant'],['amount','Amount'],['debit','Debit'],['credit','Credit'],['balance','Running balance']];
+
+    let FILE = null, DATA = null, DIRTY = false;
+
+    // ── Drop zone ────────────────────────────────────────────────────
+    const drop = $('drop'), fileIn = $('fileIn');
+    drop.addEventListener('click', () => fileIn.click());
+    fileIn.addEventListener('change', () => fileIn.files[0] && takeFile(fileIn.files[0]));
+    ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+    ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+    drop.addEventListener('drop', e => e.dataTransfer.files[0] && takeFile(e.dataTransfer.files[0]));
+
+    function takeFile(f) {
+        if (!/\.(pdf|csv|tsv|txt)$/i.test(f.name)) { $('dropErr').textContent = 'Unsupported file type — drop a PDF or CSV.'; return; }
+        if (f.size > 4 * 1024 * 1024) { $('dropErr').textContent = 'File is larger than 4 MB.'; return; }
+        FILE = f; DATA = null; parseFile();
+    }
+
+    async function parseFile(o = {}) {
+        $('dropErr').textContent = '';
+        $('dropMsg').textContent = '⏳ Reading ' + FILE.name + '…';
+        const keep = DATA ? { bank_id: DATA.meta.bank_id, account_id: DATA.meta.account_id } : null;
+        const fd = new FormData();
+        fd.append('file', FILE);
+        if (o.mapping) fd.append('mapping', JSON.stringify(o.mapping));
+        if (o.statement_type) fd.append('statement_type', o.statement_type);
+        try {
+            const r = await fetch('/api/statements/parse', { method: 'POST', body: fd });
+            if (r.status === 401) { location.href = '/login'; return; }
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) { $('dropErr').textContent = typeof d.detail === 'string' ? d.detail : 'Could not read this file.'; return; }
+            DATA = d; DIRTY = false;
+            if (keep?.bank_id) { DATA.meta.bank_id = keep.bank_id; DATA.meta.account_id = keep.account_id; }
+            DATA.meta.update_networth = false;
+            $('review').hidden = false; $('doneSec').hidden = true;
+            renderAll();
+            if (keep?.bank_id) recheckDupes();
+        } catch { $('dropErr').textContent = 'Network error. Please try again.'; }
+        finally { $('dropMsg').textContent = '📄 Drop a statement here, or click to browse'; fileIn.value = ''; }
+    }
+
+    // ── Render ───────────────────────────────────────────────────────
+    function renderAll() { renderWarn(); renderMeta(); renderMap(); renderSign(); renderRows(); refreshSummary(); }
+
+    function renderWarn() {
+        const w = DATA.warnings || [];
+        $('warnBox').hidden = !w.length;
+        $('warnBox').innerHTML = w.map(x => `<div>⚠ ${esc(x)}</div>`).join('');
+    }
+
+    const kv = (label, ctl, missing) =>
+        `<div class="kv ${missing ? 'is-missing' : ''}"><label>${label}</label><div class="ctl">${ctl}<span class="tag-missing">missing</span></div></div>`;
+
+    function renderMeta() {
+        const m = DATA.meta, L = DATA.lookups, bank = L.banks.find(b => b.id === m.bank_id);
+        const opt = (v, l, sel) => `<option value="${esc(v)}" ${sel ? 'selected' : ''}>${esc(l)}</option>`;
+        $('metaEl').innerHTML =
+            kv('Bank', `<select onchange="setMeta('bank_id', this.value, this)"><option value="">— missing —</option>${L.banks.map(b => opt(b.id, b.name, b.id === m.bank_id)).join('')}</select>`, !m.bank_id)
+            + kv('Account (for net worth)', `<select onchange="setMeta('account_id', this.value, this)" ${bank ? '' : 'disabled'}><option value="">— none —</option>${(bank?.accounts || []).map(a => opt(a.id, a.name, a.id === m.account_id)).join('')}</select>`, false)
+            + kv('Statement type', `<select onchange="changeType(this.value)">${TYPES.map(([v,l]) => opt(v, l, v === m.statement_type)).join('')}</select>`, false)
+            + kv('Period start', `<input type="date" value="${m.period_start || ''}" oninput="setMeta('period_start', this.value, this)"/>`, !m.period_start)
+            + kv('Period end', `<input type="date" value="${m.period_end || ''}" oninput="setMeta('period_end', this.value, this)"/>`, !m.period_end)
+            + kv('Opening balance (as printed)', `<input type="number" step="0.01" value="${m.opening_balance ?? ''}" oninput="setMeta('opening_balance', this.value, this)"/>`, m.opening_balance == null)
+            + kv('Closing balance (as printed)', `<input type="number" step="0.01" value="${m.closing_balance ?? ''}" oninput="setMeta('closing_balance', this.value, this)"/>`, m.closing_balance == null);
+        syncNwChk();
+    }
+
+    function renderMap() {
+        const c = DATA.csv;
+        $('mapPanel').hidden = !c;
+        if (!c) return;
+        $('mapEl').innerHTML = ROLES.map(([role, label]) =>
+            kv(label, `<select onchange="remap('${role}', this.value)"><option value="">— not in file —</option>${c.headers.filter(h => h).map(h => `<option value="${esc(h)}" ${c.mapping[role] === h ? 'selected' : ''}>${esc(h)}</option>`).join('')}</select>`,
+                (role === 'date' && !c.mapping.date) || (role === 'amount' && !c.mapping.amount && !c.mapping.debit && !c.mapping.credit))).join('');
+    }
+
+    function renderSign() { $('signEl').textContent = DATA.sign.reason; }
+
+    const catOptions = sel => '<option value="">— missing —</option>'
+        + (DATA.lookups.income.length ? `<optgroup label="Income">${DATA.lookups.income.map(c => `<option value="inc:${c.id}" ${sel === 'inc:' + c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</optgroup>` : '')
+        + DATA.lookups.expenses.filter(c => c.subcategories.length).map(c => `<optgroup label="${esc(c.name)}">${c.subcategories.map(s => `<option value="exp:${s.id}" ${sel === 'exp:' + s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</optgroup>`).join('');
+
+    const bankLabel = () => DATA.lookups.banks.find(b => b.id === DATA.meta.bank_id)?.name;
+
+    function renderRows() {
+        $('revBody').innerHTML = DATA.rows.map((r, i) => `
+    <tr class="${r.duplicate ? 'dup' : ''}">
+        <td class="muted">${i + 1}</td>
+        <td class="cell ${r.date ? '' : 'is-missing'}"><input type="date" value="${r.date || ''}" oninput="setRow(${i},'date',this.value,this)" onchange="recheckDupes()"/> <span class="tag-missing">missing</span></td>
+        <td class="cell ${r.merchant ? '' : 'is-missing'}"><input type="text" value="${esc(r.merchant)}" oninput="setRow(${i},'merchant',this.value,this)"/> <span class="tag-missing">missing</span></td>
+        <td class="cell ${r.amount == null ? 'is-missing' : ''}"><input type="number" step="0.01" value="${r.amount ?? ''}" oninput="setRow(${i},'amount',this.value,this)" onchange="recheckDupes()"/> <span class="tag-missing">missing</span></td>
+        <td class="cell ${!r.is_transfer && !r.category ? 'is-missing' : ''}"><select ${r.is_transfer ? 'disabled' : ''} onchange="setRow(${i},'category',this.value,this)">${catOptions(r.category)}</select> <span class="tag-missing">missing</span></td>
+        <td class="bankcell muted">${esc(bankLabel() ?? '—')}</td>
+        <td><input type="checkbox" ${r.is_transfer ? 'checked' : ''} onchange="setRow(${i},'is_transfer',this.checked)"/></td>
+        <td class="st">${r.duplicate ? '<span class="badge bad">Duplicate · skipped</span>' : ''}</td>
+        <td><button class="row-x" title="Remove row" onclick="delRow(${i})">✕</button></td>
+    </tr>`).join('');
+    }
+
+    // ── Checksum + counts (live) ─────────────────────────────────────
+    function calcChecksum() {
+        const m = DATA.meta, a = DATA.rows.map(r => r.amount).filter(x => x != null && !isNaN(x));
+        const total = r2(a.reduce((s, x) => s + x, 0));
+        if (m.opening_balance == null || m.closing_balance == null) return { status: 'unverified', total, expected: null, diff: null };
+        const exp = r2(m.opening_balance + (m.statement_type === 'credit' ? -1 : 1) * total), diff = r2(m.closing_balance - exp);
+        return { status: Math.abs(diff) < 0.005 ? 'ok' : 'mismatch', total, expected: exp, diff };
+    }
+
+    function refreshSummary() {
+        const m = DATA.meta, cs = calcChecksum(), cr = m.statement_type === 'credit';
+        const miss = v => v == null ? '<span class="tag-missing" style="display:inline-block">missing</span>' : m2(v);
+        $('sumEl').innerHTML = `
+        <div class="sumrow"><span>Opening balance</span><span>${miss(m.opening_balance)}</span></div>
+        <div class="sumrow"><span>${cr ? '−' : '+'} Transactions (net)</span><span>${m2(cs.total)}</span></div>
+        <div class="sumrow total"><span>= Expected closing</span><span>${cs.expected == null ? '—' : m2(cs.expected)}</span></div>
+        <div class="sumrow"><span>Stated closing</span><span>${miss(m.closing_balance)}</span></div>
+        <div class="sumrow" style="margin-top:6px"><span>${cs.status === 'ok' ? '<span class="badge ok">✔ Verified</span>' : cs.status === 'mismatch' ? `<span class="badge bad">✖ Off by ${m2(Math.abs(cs.diff))}</span>` : '<span class="badge na">— Cannot verify</span>'}</span>
+            <span class="small muted">${cr ? 'Card balances are amounts owed' : ''}</span></div>`;
+
+        const bad = DATA.rows.filter(r => !r.date || !r.merchant || r.amount == null || isNaN(r.amount)).length;
+        const dups = DATA.rows.filter(r => r.duplicate).length;
+        $('counts').textContent = `${DATA.rows.length} rows · ${dups} duplicate${dups === 1 ? '' : 's'} (skipped on import) · ${bad} with missing date/merchant/amount`;
+        $('submitBtn').disabled = !DATA.rows.length || bad > 0;
+
+        const tag = (id, on) => { $(id).textContent = on ? 'missing' : ''; $(id).style.display = on ? 'inline-block' : 'none'; };
+        tag('thDate', DATA.rows.length && DATA.rows.every(r => !r.date));
+        tag('thMerchant', DATA.rows.length && DATA.rows.every(r => !r.merchant));
+        tag('thAmount', DATA.rows.length && DATA.rows.every(r => r.amount == null));
+        tag('thCat', DATA.rows.length && DATA.rows.every(r => !r.category));
+        tag('thBank', !m.bank_id);
+    }
+
+    function syncNwChk() {
+        const m = DATA.meta, ok = !!m.account_id && m.closing_balance != null && m.statement_type !== 'credit';
+        $('nwChk').disabled = !ok;
+        if (!ok) { $('nwChk').checked = false; m.update_networth = false; }
+    }
+
+    // ── Edits ────────────────────────────────────────────────────────
+    function setMeta(f, v, el) {
+        const m = DATA.meta; DIRTY = true;
+        if (f === 'opening_balance' || f === 'closing_balance') m[f] = v === '' ? null : parseFloat(v);
+        else if (f === 'update_networth') m[f] = v;
+        else m[f] = v || null;
+        if (el?.closest('.kv')) el.closest('.kv').classList.toggle('is-missing', !el.value && f !== 'account_id');
+        if (f === 'bank_id') { m.account_id = null; renderMeta(); document.querySelectorAll('.bankcell').forEach(c => c.textContent = bankLabel() ?? '—'); recheckDupes(); }
+        syncNwChk(); refreshSummary();
+    }
+
+    function setRow(i, f, v, el) {
+        const r = DATA.rows[i]; DIRTY = true;
+        if (f === 'amount') r.amount = v === '' ? null : parseFloat(v);
+        else if (f === 'is_transfer') { r.is_transfer = v; if (v) r.category = null; renderRows(); refreshSummary(); return; }
+        else r[f] = f === 'category' ? (v || null) : v;
+        if (el) el.closest('td').classList.toggle('is-missing', f === 'category' ? !v : (v === '' || (f === 'amount' && isNaN(r.amount))));
+        refreshSummary();
+    }
+
+    function delRow(i) { DATA.rows.splice(i, 1); DIRTY = true; renderRows(); refreshSummary(); recheckDupes(); }
+    function addRow() {
+        DATA.rows.push({ date: null, merchant: '', amount: null, category: null, is_transfer: false, duplicate: false });
+        DIRTY = true; renderRows(); refreshSummary();
+        document.querySelector('#revBody tr:last-child input')?.focus();
+    }
+    function invertSigns() {
+        DATA.rows.forEach(r => { if (r.amount != null) r.amount = -r.amount; });
+        DIRTY = true; renderRows(); refreshSummary(); recheckDupes();
+    }
+
+    function changeType(v) {
+        if (DIRTY && !confirm('Changing the statement type re-reads the file and discards your edits. Continue?')) { renderMeta(); return; }
+        parseFile({ statement_type: v, mapping: DATA.csv?.mapping });
+    }
+    function remap(role, v) {
+        if (DIRTY && !confirm('Re-reading with new columns discards your edits. Continue?')) { renderMap(); return; }
+        parseFile({ statement_type: DATA.meta.statement_type, mapping: { ...DATA.csv.mapping, [role]: v } });
+    }
+
+    // ── Duplicates (server decides; this only refreshes the flags) ───
+    let _dt;
+    function recheckDupes() {
+        clearTimeout(_dt);
+        _dt = setTimeout(async () => {
+            if (!DATA) return;
+            const n = DATA.rows.length;
+            try {
+                const r = await fetch('/api/statements/check', { method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({ bank_id: DATA.meta.bank_id, rows: DATA.rows.map(x => ({ date: x.date || null, amount: x.amount })) }) });
+                if (!r.ok || !DATA || DATA.rows.length !== n) return;
+                const d = await r.json();
+                const trs = document.querySelectorAll('#revBody tr');
+                d.duplicates.forEach((v, i) => {
+                    DATA.rows[i].duplicate = v;
+                    trs[i]?.classList.toggle('dup', v);
+                    const st = trs[i]?.querySelector('td.st'); if (st) st.innerHTML = v ? '<span class="badge bad">Duplicate · skipped</span>' : '';
+                });
+                refreshSummary();
+            } catch {}
+        }, 250);
+    }
+
+    // ── Submit / discard ─────────────────────────────────────────────
+    async function submitImport() {
+        const m = DATA.meta, cs = calcChecksum(), n = DATA.rows.length;
+        if (cs.status === 'mismatch' && !confirm(`The checksum is off by ${m2(Math.abs(cs.diff))}. Rows may be missing or wrong. Import anyway?`)) return;
+        if (cs.status === 'unverified' && !confirm('No opening/closing balance, so this statement cannot be verified. Import anyway?')) return;
+        $('submitBtn').disabled = true; $('submitErr').textContent = '';
+        const body = {
+            meta: { bank_id: m.bank_id, account_id: m.account_id, statement_type: m.statement_type, period_start: m.period_start,
+                period_end: m.period_end, opening_balance: m.opening_balance, closing_balance: m.closing_balance, update_networth: !!m.update_networth },
+            rows: DATA.rows.map(r => ({ date: r.date, merchant: r.merchant.trim(), amount: r.amount, category: r.is_transfer ? null : r.category, is_transfer: r.is_transfer })),
+        };
+        try {
+            const r = await fetch('/api/statements/commit', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+            if (r.status === 401) { location.href = '/login'; return; }
+            const d = await r.json().catch(() => ({}));
+            if (!r.ok) { $('submitErr').textContent = typeof d.detail === 'string' ? d.detail : 'Import failed. Check the highlighted fields.'; $('submitBtn').disabled = false; return; }
+            FILE = null; DATA = null; DIRTY = false;                      // statement is gone from the browser too
+            $('review').hidden = true; $('doneSec').hidden = false;
+            const c = d.checksum.status;
+            $('doneSec').innerHTML = `
+            <h3 style="font-size:1rem;color:var(--text);text-transform:none;letter-spacing:0">✔ Import complete — statement discarded</h3>
+            <p class="small muted" style="margin:10px 0">${d.imported} of ${n} rows added · ${d.skipped_duplicates} skipped as duplicates${d.networth_updated ? ' · net-worth balance updated' : ''}.</p>
+            <p>${c === 'ok' ? '<span class="badge ok">✔ Checksum verified</span>' : c === 'mismatch' ? `<span class="badge bad">✖ Checksum off by ${m2(Math.abs(d.checksum.diff))}</span>` : '<span class="badge na">— Not verifiable</span>'}</p>
+            <div class="actions" style="justify-content:flex-start;margin-top:16px">
+                <a class="btn primary" href="/transactions" style="text-decoration:none">View transactions</a>
+                <button class="btn" onclick="$('doneSec').hidden = true">Import another</button></div>`;
+        } catch { $('submitErr').textContent = 'Network error. Please try again.'; $('submitBtn').disabled = false; }
+    }
+
+    function discard() {
+        if (DIRTY && !confirm('Discard this statement and your edits?')) return;
+        FILE = null; DATA = null; DIRTY = false; $('review').hidden = true;
+    }
+
+    $('hDate').textContent = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+</script>
+</body>
+</html>

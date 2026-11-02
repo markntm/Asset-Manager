@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, UniqueConstraint, func
+from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 
 MONEY = Numeric(14, 2)
@@ -125,3 +125,40 @@ class AssetEntry(EntryMixin, Base):
     __tablename__ = "nw_asset_entries"
     item_id: Mapped[str] = _fk("nw_asset_items")
     __table_args__ = (UniqueConstraint("item_id", "year", "month_idx"),)
+
+
+# ── Transactions ──
+class Transaction(IdMixin, Base):
+    __tablename__ = "transactions"
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    txn_date: Mapped[date] = mapped_column(Date, index=True)
+    merchant: Mapped[str] = mapped_column(String(200))
+    amount: Mapped[Decimal] = mapped_column(MONEY)              # negative = outflow, positive = inflow
+    is_transfer: Mapped[bool] = mapped_column(default=False, server_default="false")
+    institution_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("nw_cash_institutions.id", ondelete="SET NULL"), index=True)
+    income_category_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("cf_income_categories.id", ondelete="SET NULL"))
+    expense_subcategory_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("cf_expense_subcategories.id", ondelete="SET NULL"))
+    import_hash: Mapped[Optional[str]] = mapped_column(String(64))   # dedupe key for the future statement reader
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (UniqueConstraint("user_id", "import_hash"),)
+
+class StatementImport(IdMixin, Base):
+    """Totals + checksum of an import. The statement itself is never stored."""
+    __tablename__ = "statement_imports"
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    institution_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("nw_cash_institutions.id", ondelete="SET NULL"))
+    statement_type: Mapped[str] = mapped_column(String(20))
+    period_start: Mapped[Optional[date]] = mapped_column(Date)
+    period_end: Mapped[Optional[date]] = mapped_column(Date)
+    opening_balance: Mapped[Optional[Decimal]] = mapped_column(MONEY)
+    closing_balance: Mapped[Optional[Decimal]] = mapped_column(MONEY)
+    txn_total: Mapped[Decimal] = mapped_column(MONEY)
+    diff: Mapped[Optional[Decimal]] = mapped_column(MONEY)
+    checksum_status: Mapped[str] = mapped_column(String(12))      # ok | mismatch | unverified
+    rows_total: Mapped[int] = mapped_column()
+    rows_imported: Mapped[int] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

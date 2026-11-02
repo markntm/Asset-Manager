@@ -50,7 +50,7 @@
     .table-panel { overflow-x: auto; }
     .table-panel-head { padding: 14px; }
     thead th, tbody td { padding: 10px 12px; }
-    thead th:nth-child(2), tbody td:nth-child(2) { display: none; }
+    .table-panel thead th:nth-child(2), .table-panel tbody td:nth-child(2) { display: none; }
 
     /* Budget page: stack each row instead of a 6-column grid */
     .col-headers, .row-arrow { display: none; }
