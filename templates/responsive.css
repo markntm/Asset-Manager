@@ -3,7 +3,8 @@
 .modal { max-height: 90vh; overflow-y: auto; }
 
 /* Nav scrolls sideways instead of overflowing the page */
-.main-nav { overflow-x: auto; scrollbar-width: none; }
+.main-nav { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x; }
+.sub-nav { overflow-y: hidden; touch-action: pan-x; }
 .main-nav::-webkit-scrollbar { display: none; }
 
 /* Touch: no hover, so always show delete buttons. 16px inputs stop iOS zoom-on-focus. */
