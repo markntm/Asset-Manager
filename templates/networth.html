@@ -408,6 +408,14 @@
         .btn-ok:hover { opacity: 0.85; }
     </style>
     <link rel="stylesheet" href="/responsive.css"/>
+    <link rel="manifest" href="/static/manifest.json"/>
+    <meta name="theme-color" content="#0f1117"/>
+    <meta name="mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-title" content="FinTrack"/>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black"/>
+    <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png"/>
+    <script src="/static/pwa.js" defer></script>
 </head>
 <body>
 
@@ -590,6 +598,7 @@
     // ════════════════════════════════════════════════════════════════
     function setPieMode(detailed) {
         pieDetailed = detailed;
+        const legendPos = detailed => (detailed && !window.matchMedia('(max-width: 700px)').matches) ? 'right' : 'bottom';
         document.querySelectorAll('#pieToggle .detail-pill').forEach((b, i) => {
             b.classList.toggle('active', i === (detailed ? 1 : 0));
         });
@@ -872,7 +881,7 @@
             </div>
             <button class="btn-del" onclick="event.stopPropagation();doDelCashInst('${inst.id}')">✕</button>
         </div>
-        <div class="inst-body" id="cash-inst-body-${inst.id}">
+        <div class="inst-body" id="cash-inst-${inst.id}-body">
             ${rows || '<div class="empty-msg" style="padding-left:44px">No accounts yet.</div>'}
             <div class="add-row indented">
                 <button class="btn-add-row" onclick="openModal('cash-acc','${inst.id}')">+ Add Account</button>
@@ -950,7 +959,7 @@
             </div>
             <button class="btn-del" onclick="event.stopPropagation();doDelInvBrk('${brk.id}')">✕</button>
         </div>
-        <div class="inst-body" id="inv-brk-body-${brk.id}">
+        <div class="inst-body" id="inv-brk-${brk.id}-body">
             ${rows || '<div class="empty-msg" style="padding-left:44px">No holdings yet.</div>'}
             <div class="add-row indented">
                 <button class="btn-add-row" onclick="openModal('inv-hold','${brk.id}')">+ Add Holding</button>
@@ -1020,7 +1029,7 @@
             </div>
             <button class="btn-del" onclick="event.stopPropagation();doDelAstCat('${cat.id}')">✕</button>
         </div>
-        <div class="inst-body" id="ast-cat-body-${cat.id}">
+        <div class="inst-body" id="ast-cat-${cat.id}-body">
             ${rows || '<div class="empty-msg" style="padding-left:44px">No assets yet.</div>'}
             <div class="add-row indented">
                 <button class="btn-add-row" onclick="openModal('ast-item','${cat.id}')">+ Add Asset</button>
@@ -1315,6 +1324,7 @@
         } else {
             yView.classList.add('hidden');
             mView.classList.remove('hidden');
+            setHtml('yearCardsEl', '');   // avoid duplicate sc-* ids while a month is shown
             renderMonthView(view);
         }
     }

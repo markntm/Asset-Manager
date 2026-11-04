@@ -23,8 +23,10 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from starlette.middleware.sessions import SessionMiddleware
 from database.base import NotFound
 from routers import cashflow, networth, budget, dashboard, account, transactions, statements
+from fastapi.staticfiles import StaticFiles
 
 STATIC_DIR = Path(__file__).parent / "templates"
+PWA_DIR = Path(__file__).parent / "static"
 
 _PLACEHOLDER = (
     "<!doctype html><html><body style='font-family:sans-serif;padding:40px'>"
@@ -32,6 +34,8 @@ _PLACEHOLDER = (
 )
 
 app = FastAPI(title="FinTrack", version="1.0")
+app.mount("/static", StaticFiles(directory=PWA_DIR), name="static")
+
 
 @app.exception_handler(NotFound)
 async def _not_found(request, exc):
@@ -111,6 +115,10 @@ def logout(request: Request):
 def responsive_css():
     return FileResponse(STATIC_DIR / "responsive.css", media_type="text/css")
 
+@app.get("/sw.js", include_in_schema=False)   # must be served from "/" so its scope covers the whole app
+def service_worker():
+    return FileResponse(PWA_DIR / "sw.js", media_type="text/javascript",
+                        headers={"Cache-Control": "no-cache"})
 
 # ── API routers ───────────────────────────────────────────────────────────────
 
