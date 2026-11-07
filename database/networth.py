@@ -6,13 +6,15 @@ from sqlalchemy import select, update
 from database.base import (NotFound, SessionLocal, add_child, add_root, cells, delete_child,
                            delete_root, require_child, roots, upsert_cell)
 from database.models import (AssetCategory, AssetEntry, AssetItem, Brokerage, CashAccount,
-                             CashEntry, CashInstitution, Holding, InvEntry)
+                             CashEntry, CashInstitution, Holding, InvEntry,
+                             LiabilityEntry, LiabilityCategory, LiabilityItem)
 
 # (leaf table, fk to parent, parent table, entry table, fk in entry table)
 _LEAVES = (
     (CashAccount, "institution_id", CashInstitution, CashEntry, "account_id"),
     (Holding,     "brokerage_id",   Brokerage,       InvEntry,  "holding_id"),
     (AssetItem,   "category_id",    AssetCategory,   AssetEntry, "item_id"),
+    (LiabilityItem, "category_id", LiabilityCategory, LiabilityEntry, "item_id"),
 )
 
 
@@ -42,6 +44,8 @@ def get_networth_data(user_id: str, year: int) -> dict:
                                  ("ticker", "quantity")),
             "assets": _tree(s, user_id, year, AssetCategory, AssetItem, "category_id",
                             AssetEntry, "item_id", "items", AssetItem.name),
+            "liabilities": _tree(s, user_id, year, LiabilityCategory, LiabilityItem, "category_id",
+                                 LiabilityEntry, "item_id", "items", LiabilityItem.name),
         }
 
 
@@ -101,6 +105,20 @@ def delete_asset_category(user_id, category_id):
 
 def delete_asset_item(user_id, item_id):
     delete_child(user_id, AssetItem, "category_id", AssetCategory, item_id)
+
+
+# ── Liabilities ──
+def add_liability_category(user_id, name):
+    return add_root(LiabilityCategory, user_id, name)
+
+def add_liability_item(user_id, category_id, name):
+    return add_child(user_id, LiabilityItem, "category_id", LiabilityCategory, category_id, name=name)
+
+def delete_liability_category(user_id, category_id):
+    delete_root(LiabilityCategory, user_id, category_id)
+
+def delete_liability_item(user_id, item_id):
+    delete_child(user_id, LiabilityItem, "category_id", LiabilityCategory, item_id)
 
 
 # ── Unified cell save ──

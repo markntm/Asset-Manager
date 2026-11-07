@@ -373,11 +373,10 @@
         el.textContent = zero ? '—' : (up ? '▲ ' : '▼ ') + fmtAmt(Math.abs(value));
     }
 
-    function momBadge(change) {
+    function momBadge(change, invert = false) {
         if (change == null) return `<span style="color:var(--muted)">—</span>`;
         const zero = Math.abs(change) < 0.005;
-        const cls  = zero ? 'flat' : change > 0 ? 'up' : 'down';
-        return zero
+        const cls  = zero ? 'flat' : (change > 0) !== invert ? 'up' : 'down';        return zero
             ? `<span class="badge flat">—</span>`
             : `<span class="badge ${cls}">${change > 0 ? '▲' : '▼'} ${fmtAmt(Math.abs(change))}</span>`;
     }
@@ -415,12 +414,16 @@
                 tension:            0.4,
                 fill:               true,
                 spanGaps:           false,
+            }, {
+                label: 'Liabilities', data: Array(12).fill(null),
+                borderColor: '#f87171', backgroundColor: 'transparent',
+                borderWidth: 1.5, pointRadius: 2, tension: 0.4, borderDash: [4,3], spanGaps: false,
             }],
         },
         options: {
             responsive: true, maintainAspectRatio: false,
             plugins: {
-                legend: { display: false },
+                legend: { position: 'bottom', labels: { usePointStyle: true } },
                 tooltip: { ...TIP_BASE, callbacks: { label: c => ' ' + fmtAmt(c.parsed.y) } },
             },
             scales: {
@@ -439,11 +442,12 @@
         const now = new Date(), cur = now.getFullYear() * 12 + now.getMonth();
         let pts = _trend.filter(p => p.year * 12 + p.month <= cur);
         if (trendRange === 0) {
-            const i = pts.findIndex(p => p.value > 0);
+            const i = pts.findIndex(p => p.value !== 0);
             pts = i < 0 ? [] : pts.slice(i);
         } else pts = pts.slice(-trendRange);
         nwChart.data.labels = pts.map(p => `${MONTHS[p.month]} '${String(p.year).slice(2)}`);
-        nwChart.data.datasets[0].data = pts.map(p => p.value > 0 ? p.value : null);
+        nwChart.data.datasets[0].data = pts.map(p => p.value !== 0 ? p.value : null);
+        nwChart.data.datasets[1].data = pts.map(p => p.liabilities > 0 ? p.liabilities : null);
         nwChart.update();
     }
 
@@ -459,10 +463,10 @@
     const donutChart = new Chart(document.getElementById('allocationDonut'), {
         type: 'doughnut',
         data: {
-            labels:   ['Cash & Savings', 'Investments', 'Assets'],
+            labels:   ['Cash & Savings', 'Investments', 'Assets', 'Liabilities'],
             datasets: [{
-                data:            [1, 1, 1],   // placeholder equal slices until API responds
-                backgroundColor: ['#60a5fa', '#4ade80', '#f59e0b'],
+                data:            [1, 1, 1, 1],   // placeholder equal slices until API responds
+                backgroundColor: ['#60a5fa', '#4ade80', '#f59e0b', '#f87171'],
                 borderColor:     '#1a1d27',
                 borderWidth:     3,
                 hoverOffset:     8,
@@ -495,7 +499,8 @@
     const CASH_PALETTE = ['#60a5fa','#3b82f6','#2563eb','#93c5fd','#bfdbfe'];
     const INV_PALETTE  = ['#4ade80','#22c55e','#16a34a','#86efac','#bbf7d0'];
     const AST_PALETTE  = ['#f59e0b','#d97706','#b45309','#fcd34d','#fde68a'];
-    const PIE_COLORS   = ['#60a5fa','#4ade80','#f59e0b'];
+    const PIE_COLORS   = ['#60a5fa','#4ade80','#f59e0b','#f87171'];
+    const LIAB_PALETTE = ['#f87171','#ef4444','#dc2626','#fca5a5','#fecaca'];
 
     function setAllocMode(detailed) {
         allocDetailed = detailed;
@@ -515,7 +520,7 @@
         if (allocDetailed && accounts.length > 0) {
             // One slice per individual account/holding/asset item,
             // color-coded by group so membership stays clear.
-            const typeCount = { cash: 0, investment: 0, asset: 0 };
+            const typeCount = { cash: 0, investment: 0, asset: 0, liability: 0 };
             const labels = [], values = [], colors = [];
 
             accounts.forEach(a => {
@@ -523,6 +528,7 @@
                 let palette;
                 if      (a.type === 'cash')       palette = CASH_PALETTE;
                 else if (a.type === 'investment') palette = INV_PALETTE;
+                else if (a.type === 'liability')  palette = LIAB_PALETTE;
                 else                              palette = AST_PALETTE;
 
                 labels.push(a.name);
@@ -536,11 +542,12 @@
             donutChart.data.datasets[0].backgroundColor = colors;
         } else {
             // 3. Summary: three top-level buckets
-            donutChart.data.labels                      = ['Cash & Savings', 'Investments', 'Assets'];
+            donutChart.data.labels                      = ['Cash & Savings', 'Investments', 'Assets', 'Liabilities'];
             donutChart.data.datasets[0].data            = [
                 alloc.savings     ?? 0,
                 alloc.investments ?? 0,
-                alloc.assets      ?? 0
+                alloc.assets      ?? 0,
+                alloc.liabilities ?? 0
             ];
             donutChart.data.datasets[0].backgroundColor = PIE_COLORS;
         }
@@ -624,9 +631,9 @@
                     ${a.name}
                 </td>
                 <td style="color:var(--muted);text-transform:capitalize">${a.type}</td>
-                <td>${fmtAmt(a.balance)}</td>
+                <td style="${a.type === 'liability' ? 'color:var(--red)' : ''}">${fmtAmt(a.balance)}</td>
                 <td style="color:var(--muted)">${a.pct_of_total != null ? a.pct_of_total.toFixed(1) + '%' : '—'}</td>
-                <td>${momBadge(a.mom_change)}</td>
+                <td>${momBadge(a.mom_change, a.type === 'liability')}</td>
             </tr>
         `).join('');
     }

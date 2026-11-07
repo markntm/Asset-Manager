@@ -126,6 +126,19 @@ class AssetEntry(EntryMixin, Base):
     item_id: Mapped[str] = _fk("nw_asset_items")
     __table_args__ = (UniqueConstraint("item_id", "year", "month_idx"),)
 
+class LiabilityCategory(RootMixin, Base):
+    __tablename__ = "nw_liability_categories"
+
+class LiabilityItem(IdMixin, Base):
+    __tablename__ = "nw_liability_items"
+    category_id: Mapped[str] = _fk("nw_liability_categories")
+    name: Mapped[str] = mapped_column(String(200))
+
+class LiabilityEntry(EntryMixin, Base):
+    __tablename__ = "nw_liability_entries"
+    item_id: Mapped[str] = _fk("nw_liability_items")
+    __table_args__ = (UniqueConstraint("item_id", "year", "month_idx"),)
+
 
 # ── Transactions ──
 class Transaction(IdMixin, Base):

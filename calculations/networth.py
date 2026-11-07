@@ -151,30 +151,48 @@ def ast_year_series(categories: list[dict]) -> list[float]:
 
 
 # ════════════════════════════════════════════════════════════════════
+#  LIABILITIES  (stored as positive amounts owed)
+# ════════════════════════════════════════════════════════════════════
+
+def liab_item_value(item: dict, month_idx: int) -> float:
+    return _get(item["values"], month_idx)
+
+
+def liab_category_total(category: dict, month_idx: int) -> float:
+    return round(sum(_get(i["values"], month_idx) for i in category.get("items", [])), 2)
+
+
+def liab_month_total(categories: list[dict], month_idx: int) -> float:
+    return round(sum(liab_category_total(c, month_idx) for c in categories), 2)
+
+
+def liab_year_series(categories: list[dict]) -> list[float]:
+    return [liab_month_total(categories, mi) for mi in range(12)]
+
+
+# ════════════════════════════════════════════════════════════════════
 #  NET WORTH TOTALS
 # ════════════════════════════════════════════════════════════════════
 
 def net_worth_month_total(
         cash: list[dict], investments: list[dict], assets: list[dict],
-        month_idx: int,
+        liabilities: list[dict], month_idx: int,
 ) -> float:
-    """Combined net worth across all three groups for one month."""
+    """Cash + investments + assets − liabilities for one month."""
     return round(
         cash_month_total(cash, month_idx)
         + inv_month_total(investments, month_idx)
-        + ast_month_total(assets, month_idx),
+        + ast_month_total(assets, month_idx)
+        - liab_month_total(liabilities, month_idx),
         2,
         )
 
 
 def net_worth_year_series(
-        cash: list[dict], investments: list[dict], assets: list[dict]
+        cash: list[dict], investments: list[dict], assets: list[dict],
+        liabilities: list[dict],
 ) -> list[float]:
-    """
-    Monthly net worth totals for all 12 months.
-    Consumed by the Net Worth Trend line chart dataset.
-    """
-    return [net_worth_month_total(cash, investments, assets, mi) for mi in range(12)]
+    return [net_worth_month_total(cash, investments, assets, liabilities, mi) for mi in range(12)]
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -182,7 +200,8 @@ def net_worth_year_series(
 # ════════════════════════════════════════════════════════════════════
 
 def latest_filled_month(
-        cash: list[dict], investments: list[dict], assets: list[dict]
+        cash: list[dict], investments: list[dict], assets: list[dict],
+        liabilities: list[dict],
 ) -> Optional[int]:
     """
     Returns the highest month index (0–11) that has at least one non-zero
@@ -197,6 +216,9 @@ def latest_filled_month(
         for h in brk.get("holdings", []):
             all_value_maps.append(h.get("values", {}))
     for cat in assets:
+        for item in cat.get("items", []):
+            all_value_maps.append(item.get("values", {}))
+    for cat in liabilities:
         for item in cat.get("items", []):
             all_value_maps.append(item.get("values", {}))
 
@@ -236,29 +258,23 @@ def mom_pct_change(current: float, previous: Optional[float]) -> Optional[float]
 
 def allocation_at_month(
         cash: list[dict], investments: list[dict], assets: list[dict],
-        month_idx: int,
+        liabilities: list[dict], month_idx: int,
 ) -> dict:
-    """
-    Per-group dollar amounts and percentage share of net worth at one month.
-    Percentages are None when net worth is zero.
-
-    Returns:
-        {
-            "cash":        { "amount": float, "pct": float | None },
-            "investments": { "amount": float, "pct": float | None },
-            "assets":      { "amount": float, "pct": float | None },
-        }
-    """
+    """Dollar amount and share of gross holdings (cash + investments + assets) per group."""
     c = cash_month_total(cash, month_idx)
     i = inv_month_total(investments, month_idx)
     a = ast_month_total(assets, month_idx)
-    nw = c + i + a
+    l = liab_month_total(liabilities, month_idx)
+    gross = c + i + a
+
     def pct(v: float) -> Optional[float]:
-        return round(v / nw * 100, 2) if nw > 0 else None
+        return round(v / gross * 100, 2) if gross > 0 else None
+
     return {
         "cash":        {"amount": c, "pct": pct(c)},
         "investments": {"amount": i, "pct": pct(i)},
         "assets":      {"amount": a, "pct": pct(a)},
+        "liabilities": {"amount": l, "pct": pct(l)},
     }
 
 
@@ -270,6 +286,7 @@ def compute_networth_summary(
         cash:        list[dict],
         investments: list[dict],
         assets:      list[dict],
+        liabilities: list[dict],
         year:        int,
         month_idx:   int,
 ) -> dict:
@@ -322,18 +339,19 @@ def compute_networth_summary(
     """
     pmi = _prev(month_idx)
 
-    # ── Group totals at current and previous month ────────────────
     c_cur  = cash_month_total(cash, month_idx)
     i_cur  = inv_month_total(investments, month_idx)
     a_cur  = ast_month_total(assets, month_idx)
-    nw_cur = round(c_cur + i_cur + a_cur, 2)
+    l_cur  = liab_month_total(liabilities, month_idx)
+    nw_cur = round(c_cur + i_cur + a_cur - l_cur, 2)
 
     c_prv  = cash_month_total(cash, pmi)          if pmi is not None else None
     i_prv  = inv_month_total(investments, pmi)    if pmi is not None else None
     a_prv  = ast_month_total(assets, pmi)         if pmi is not None else None
-    nw_prv = round(c_prv + i_prv + a_prv, 2)     if pmi is not None else None
+    l_prv  = liab_month_total(liabilities, pmi)   if pmi is not None else None
+    nw_prv = round(c_prv + i_prv + a_prv - l_prv, 2) if pmi is not None else None
 
-    alloc = allocation_at_month(cash, investments, assets, month_idx)
+    alloc = allocation_at_month(cash, investments, assets, liabilities, month_idx)
 
     summary = {
         "cash":               c_cur,
@@ -348,6 +366,9 @@ def compute_networth_summary(
         "cash_pct":           alloc["cash"]["pct"],
         "investments_pct":    alloc["investments"]["pct"],
         "assets_pct":         alloc["assets"]["pct"],
+        "liabilities":        l_cur,
+        "liabilities_delta":  mom_change(l_cur, l_prv),
+        "liabilities_pct":    alloc["liabilities"]["pct"],
     }
 
     # ── Institution-level totals + deltas ─────────────────────────
@@ -372,6 +393,13 @@ def compute_networth_summary(
         ast_cat_totals[cat["id"]] = t
         ast_cat_deltas[cat["id"]] = mom_change(t, p)
 
+    liab_cat_totals, liab_cat_deltas = {}, {}
+    for cat in liabilities:
+        t = liab_category_total(cat, month_idx)
+        p = liab_category_total(cat, pmi) if pmi is not None else None
+        liab_cat_totals[cat["id"]] = t
+        liab_cat_deltas[cat["id"]] = mom_change(t, p)
+
     # ── Leaf-level deltas ─────────────────────────────────────────
     cash_acc_deltas = {}
     for inst in cash:
@@ -394,10 +422,17 @@ def compute_networth_summary(
             pv = ast_item_value(item, pmi) if pmi is not None else None
             ast_item_deltas[item["id"]] = mom_change(cv, pv)
 
+    liab_item_deltas = {}
+    for cat in liabilities:
+        for item in cat.get("items", []):
+            cv = liab_item_value(item, month_idx)
+            pv = liab_item_value(item, pmi) if pmi is not None else None
+            liab_item_deltas[item["id"]] = mom_change(cv, pv)
+
     return {
         "year":               year,
         "month_idx":          month_idx,
-        "latest_month_idx":   latest_filled_month(cash, investments, assets),
+        "latest_month_idx":   latest_filled_month(cash, investments, assets, liabilities),
         "summary":            summary,
         "cash_inst_totals":   cash_inst_totals,
         "cash_inst_deltas":   cash_inst_deltas,
@@ -408,11 +443,15 @@ def compute_networth_summary(
         "cash_acc_deltas":    cash_acc_deltas,
         "inv_hold_deltas":    inv_hold_deltas,
         "ast_item_deltas":    ast_item_deltas,
-        "net_worth_series":   net_worth_year_series(cash, investments, assets),
+        "liab_cat_totals":    liab_cat_totals,
+        "liab_cat_deltas":    liab_cat_deltas,
+        "liab_item_deltas":   liab_item_deltas,
+        "net_worth_series":   net_worth_year_series(cash, investments, assets, liabilities),
         "group_series": {
             "cash":        cash_year_series(cash),
             "investments": inv_year_series(investments),
             "assets":      ast_year_series(assets),
+            "liabilities": liab_year_series(liabilities),
         },
     }
 
@@ -422,42 +461,30 @@ def compute_networth_summary(
 # ════════════════════════════════════════════════════════════════════
 
 def compute_dashboard_networth(
-        cash: list[dict], investments: list[dict], assets: list[dict]
+        cash: list[dict], investments: list[dict], assets: list[dict],
+        liabilities: list[dict],
 ) -> dict:
-    """
-    Net worth snapshot for the dashboard summary card.
-    Uses the latest filled month.
-
-    Returns:
-        {
-            "net_worth":         float,
-            "total_cash":        float,
-            "total_investments": float,
-            "nw_mom_change":     float | None,
-            "nw_mom_pct":        float | None,
-            "net_worth_trend":   [float | None × 12],
-            "allocation": { "cash": float, "investments": float, "assets": float },
-        }
-    """
-    lfm  = latest_filled_month(cash, investments, assets)
+    """Net worth snapshot for the dashboard summary card (latest filled month)."""
+    lfm  = latest_filled_month(cash, investments, assets, liabilities)
     pmi  = _prev(lfm) if lfm is not None else None
 
-    nw_cur  = net_worth_month_total(cash, investments, assets, lfm) if lfm is not None else 0.0
-    nw_prev = net_worth_month_total(cash, investments, assets, pmi) if pmi is not None else None
+    nw_cur  = net_worth_month_total(cash, investments, assets, liabilities, lfm) if lfm is not None else 0.0
+    nw_prev = net_worth_month_total(cash, investments, assets, liabilities, pmi) if pmi is not None else None
 
-    raw = net_worth_year_series(cash, investments, assets)
-    trend = [v if v > 0.0 else None for v in raw]
+    raw = net_worth_year_series(cash, investments, assets, liabilities)
+    trend = [v if v != 0.0 else None for v in raw]
 
     alloc = (
-        allocation_at_month(cash, investments, assets, lfm)
+        allocation_at_month(cash, investments, assets, liabilities, lfm)
         if lfm is not None
-        else {"cash": {"amount": 0.0}, "investments": {"amount": 0.0}, "assets": {"amount": 0.0}}
+        else {k: {"amount": 0.0} for k in ("cash", "investments", "assets", "liabilities")}
     )
 
     return {
         "net_worth":         nw_cur,
         "total_cash":        alloc["cash"]["amount"],
         "total_investments": alloc["investments"]["amount"],
+        "total_liabilities": alloc["liabilities"]["amount"],
         "nw_mom_change":     mom_change(nw_cur, nw_prev),
         "nw_mom_pct":        mom_pct_change(nw_cur, nw_prev),
         "net_worth_trend":   trend,
