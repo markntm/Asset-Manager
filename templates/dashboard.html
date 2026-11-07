@@ -272,10 +272,10 @@
         <div class="panel">
             <div class="panel-head">
                 <span class="panel-title">Net Worth Trend</span>
-                <div class="range-pills pills-pending" title="Range selection coming soon">
-                    <button class="pill active">6M</button>
-                    <button class="pill">1Y</button>
-                    <button class="pill">All</button>
+                <div class="range-pills" id="rangePills">
+                    <button class="pill" data-r="6">6M</button>
+                    <button class="pill active" data-r="12">1Y</button>
+                    <button class="pill" data-r="0">All</button>
                 </div>
             </div>
             <div class="chart-wrap"><canvas id="nwTrendChart"></canvas></div>
@@ -401,6 +401,28 @@
                 },
             },
         },
+    });
+
+    let _trend = [], trendRange = 12;   // 0 = All
+
+    function renderTrend() {
+        const now = new Date(), cur = now.getFullYear() * 12 + now.getMonth();
+        let pts = _trend.filter(p => p.year * 12 + p.month <= cur);
+        if (trendRange === 0) {
+            const i = pts.findIndex(p => p.value > 0);
+            pts = i < 0 ? [] : pts.slice(i);
+        } else pts = pts.slice(-trendRange);
+        nwChart.data.labels = pts.map(p => `${MONTHS[p.month]} '${String(p.year).slice(2)}`);
+        nwChart.data.datasets[0].data = pts.map(p => p.value > 0 ? p.value : null);
+        nwChart.update();
+    }
+
+    document.getElementById('rangePills').addEventListener('click', e => {
+        const b = e.target.closest('.pill');
+        if (!b) return;
+        trendRange = +b.dataset.r;
+        document.querySelectorAll('#rangePills .pill').forEach(p => p.classList.toggle('active', p === b));
+        renderTrend();
     });
 
     // Allocation Donut — three buckets matching backend groups
@@ -533,10 +555,8 @@
         setBadge('badge-cf', data.monthly_cashflow);
 
         // ── Net worth trend ────────────────────────────────────────
-        if (Array.isArray(data.net_worth_trend)) {
-            nwChart.data.datasets[0].data = data.net_worth_trend.map(v => v > 0 ? v : null);
-            nwChart.update();
-        }
+        _trend = data.net_worth_series || [];
+        renderTrend();
 
         // Cache the fetched data for the toggle
         _dashData = data;

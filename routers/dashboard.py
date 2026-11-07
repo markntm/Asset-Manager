@@ -16,7 +16,8 @@ from auth import current_user_id
 from database import cashflow as cf_db
 from database import networth as nw_db
 from calculations.cashflow import compute_dashboard_cashflow
-from calculations.networth import compute_dashboard_networth, latest_filled_month
+from calculations.networth import compute_dashboard_networth, latest_filled_month, net_worth_year_series
+
 
 router = APIRouter(tags=["dashboard"])
 
@@ -115,6 +116,14 @@ def get_dashboard_summary(
     lfm      = latest_filled_month(nw_data["cash"], nw_data["investments"], nw_data["assets"])
     accounts = _build_accounts(nw_data, lfm, nw["net_worth"])
 
+    # Contiguous monthly series from first year with data through the current year
+    first_year = min(nw_db.get_years(user_id), default=year)
+    trend = []
+    for y in range(min(first_year, year), year + 1):
+        d = nw_data if y == year else nw_db.get_networth_data(user_id, y)
+        for mi, v in enumerate(net_worth_year_series(d["cash"], d["investments"], d["assets"])):
+            trend.append({"year": y, "month": mi, "value": v})
+
     return {
         # Summary cards
         "net_worth":        nw["net_worth"],
@@ -124,7 +133,7 @@ def get_dashboard_summary(
         "savings_rate":     cf["savings_rate"],
         "nw_mom_change":    nw["nw_mom_change"],
         # Net Worth Trend line chart (12 months, None for unpopulated months)
-        "net_worth_trend":  nw["net_worth_trend"],
+        "net_worth_series": trend,
         # Allocation donut — frontend keys are savings/investments/assets
         "allocation": {
             "savings":     nw["allocation"]["cash"],
