@@ -265,6 +265,33 @@
             <div class="card-value" id="card-savings-rate">—%</div>
             <div class="card-footer">This month</div>
         </div>
+
+        <div class="card">
+            <div class="card-top">
+                <div class="card-icon" style="background:rgba(248,113,113,0.15)">🧾</div>
+                Avg Monthly Spending
+            </div>
+            <div class="card-value" id="card-avg-spend">$—</div>
+            <div class="card-footer">Last 3 months</div>
+        </div>
+
+        <div class="card">
+            <div class="card-top">
+                <div class="card-icon" style="background:rgba(96,165,250,0.15)">🛟</div>
+                Emergency Fund Runway
+            </div>
+            <div class="card-value" id="card-runway">—</div>
+            <div class="card-footer">Cash ÷ avg spending</div>
+        </div>
+
+        <div class="card">
+            <div class="card-top">
+                <div class="card-icon" style="background:rgba(74,222,128,0.15)">📋</div>
+                Budget Remaining
+            </div>
+            <div class="card-value" id="card-budget">$—</div>
+            <div class="card-footer" id="card-budget-sub">This month</div>
+        </div>
     </div>
 
     <!-- Charts -->
@@ -297,7 +324,10 @@
     <div class="table-panel">
         <div class="table-panel-head">
             <span class="panel-title">Account Overview</span>
-            <span style="font-size:0.8rem; color:var(--muted)">Current month balances</span>
+            <div class="range-pills" id="acctPills">
+                <button class="pill active" data-n="5">Top 5</button>
+                <button class="pill" data-n="0">All</button>
+            </div>
         </div>
         <table>
             <thead>
@@ -551,6 +581,15 @@
         }
         setTxt('card-savings-rate', data.savings_rate != null ? data.savings_rate.toFixed(1) + '%' : '—%');
 
+        setTxt('card-avg-spend', fmtAmt(data.avg_monthly_spend));
+        setTxt('card-runway', data.runway_months != null ? data.runway_months.toFixed(1) + ' mo' : '—');
+        const bEl = document.getElementById('card-budget');
+        if (bEl) {
+            bEl.textContent = fmtAmt(data.budget_remaining);
+            bEl.style.color = data.budget_remaining < 0 ? 'var(--red)' : 'var(--green)';
+        }
+        setTxt('card-budget-sub', data.budget_total ? `of ${fmtAmt(data.budget_total)} this month` : 'No budgets set');
+
         setBadge('badge-nw', data.nw_mom_change);
         setBadge('badge-cf', data.monthly_cashflow);
 
@@ -568,13 +607,17 @@
         populateTable(data.accounts || []);
     }
 
+    let _accounts = [], acctLimit = 5;   // 0 = All
+
     function populateTable(accounts) {
+        if (accounts) _accounts = accounts;
         const tbody  = document.getElementById('accountsBody');
         const colors = ['#6c63ff','#4ade80','#f59e0b','#60a5fa','#f87171','#e879f9'];
 
-        if (!accounts.length) return;   // leave the empty-state row in place
+        if (!_accounts.length) return;   // leave the empty-state row in place
 
-        tbody.innerHTML = accounts.map((a, i) => `
+        const rows = acctLimit ? _accounts.slice(0, acctLimit) : _accounts;
+        tbody.innerHTML = rows.map((a, i) => `
             <tr>
                 <td>
                     <span class="dot" style="background:${colors[i % colors.length]}"></span>
@@ -587,6 +630,14 @@
             </tr>
         `).join('');
     }
+
+    document.getElementById('acctPills').addEventListener('click', e => {
+        const b = e.target.closest('.pill');
+        if (!b) return;
+        acctLimit = +b.dataset.n;
+        document.querySelectorAll('#acctPills .pill').forEach(p => p.classList.toggle('active', p === b));
+        populateTable();
+    });
 
     // ════════════════════════════════════════════════════════════════
     //  INIT

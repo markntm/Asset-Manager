@@ -15,7 +15,8 @@ from fastapi import APIRouter, Depends, Query
 from auth import current_user_id
 from database import cashflow as cf_db
 from database import networth as nw_db
-from calculations.cashflow import compute_dashboard_cashflow
+from database import budget as bud_db
+from calculations.cashflow import compute_dashboard_cashflow, expense_category_total, expense_month_total
 from calculations.networth import compute_dashboard_networth, latest_filled_month, net_worth_year_series
 
 
@@ -113,6 +114,15 @@ def get_dashboard_summary(
         cf_data["income"], cf_data["expenses"], current_month_idx
     )
 
+    spend = [expense_month_total(cf_data["expenses"], mi) for mi in range(current_month_idx + 1)]
+    recent = [v for v in spend if v > 0][-3:]
+    avg_spend = sum(recent) / len(recent) if recent else None
+
+    targets = {c["id"]: c["monthly_budget"] for c in bud_db.get_budget_categories(user_id) if c["monthly_budget"]}
+    budget_total = sum(targets.values())
+    spent_budgeted = sum(expense_category_total(c, current_month_idx)
+                         for c in cf_data["expenses"] if c["id"] in targets)
+
     lfm      = latest_filled_month(nw_data["cash"], nw_data["investments"], nw_data["assets"])
     accounts = _build_accounts(nw_data, lfm, nw["net_worth"])
 
@@ -132,14 +142,21 @@ def get_dashboard_summary(
         "monthly_cashflow": cf["monthly_cashflow"],
         "savings_rate":     cf["savings_rate"],
         "nw_mom_change":    nw["nw_mom_change"],
+        "avg_monthly_spend": avg_spend,
+        "runway_months":     nw["total_cash"] / avg_spend if avg_spend else None,
+        "budget_total":      budget_total or None,
+        "budget_remaining":  budget_total - spent_budgeted if budget_total else None,
+
         # Net Worth Trend line chart (12 months, None for unpopulated months)
         "net_worth_series": trend,
+
         # Allocation donut — frontend keys are savings/investments/assets
         "allocation": {
             "savings":     nw["allocation"]["cash"],
             "investments": nw["allocation"]["investments"],
             "assets":      nw["allocation"]["assets"],
         },
+
         # Account overview table
         "accounts": accounts,
     }
