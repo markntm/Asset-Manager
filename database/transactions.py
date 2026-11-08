@@ -5,6 +5,7 @@ from database.base import NotFound, SessionLocal, require_child, require_root, r
 from database.models import (CashInstitution, ExpenseCategory, ExpenseSubcategory,
                              IncomeCategory, Transaction)
 from database.sync import cell_keys, sync_cashflow
+from calculations.flags import flag_transactions
 
 
 def _row(t) -> dict:
@@ -39,8 +40,12 @@ def get_transactions_page(user_id: str) -> dict:
         subs = s.scalars(select(ExpenseSubcategory)
                          .where(ExpenseSubcategory.category_id.in_([c.id for c in exp]))
                          .order_by(ExpenseSubcategory.name)).all()
+        rows = [_row(t) for t in txns]
+        flags = flag_transactions(rows)
+        for r in rows:
+            r["flags"] = flags.get(r["id"], [])
         return {
-            "transactions": [_row(t) for t in txns],
+            "transactions": rows,
             "banks":   [{"id": b.id, "name": b.name} for b in roots(s, CashInstitution, user_id)],
             "income":  [{"id": c.id, "name": c.name} for c in roots(s, IncomeCategory, user_id)],
             "expenses": [{"id": c.id, "name": c.name,
