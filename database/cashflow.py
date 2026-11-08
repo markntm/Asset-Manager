@@ -5,7 +5,7 @@ from sqlalchemy import select
 from database.base import (SessionLocal, add_child, add_root, cells, delete_child,
                            delete_root, require_child, require_root, roots, upsert_cell)
 from database.models import (BudgetEntry, ExpenseCategory, ExpenseEntry,
-                             ExpenseSubcategory, IncomeCategory, IncomeEntry)
+                             ExpenseSubcategory, IncomeCategory, IncomeEntry, BudgetTarget)
 
 
 def get_cashflow_data(user_id: str, year: int) -> dict:
@@ -20,6 +20,8 @@ def get_cashflow_data(user_id: str, year: int) -> dict:
                          .order_by(ExpenseSubcategory.name)).all()
         sub_vals = cells(s, ExpenseEntry, "subcategory_id", [sc.id for sc in subs], year)
         bud_vals = cells(s, BudgetEntry, "category_id", exp_ids, year)
+        targets = dict(s.execute(select(BudgetTarget.category_id, BudgetTarget.monthly_budget)
+                                 .where(BudgetTarget.category_id.in_(exp_ids))).all())
 
         subs_by_cat = defaultdict(list)
         for sc in subs:
@@ -28,6 +30,7 @@ def get_cashflow_data(user_id: str, year: int) -> dict:
         return {
             "income": [{"id": c.id, "name": c.name, "values": inc_vals[c.id]} for c in inc],
             "expenses": [{"id": c.id, "name": c.name, "budget": bud_vals[c.id],
+                          "target": float(targets.get(c.id) or 0),
                           "subcategories": subs_by_cat[c.id]} for c in exp],
         }
 

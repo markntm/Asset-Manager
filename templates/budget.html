@@ -123,7 +123,7 @@
         /* ── Column headers ──────────────────────────────────────── */
         .col-headers {
             display: grid;
-            grid-template-columns: 28px 1fr 178px 22px 152px 68px;
+            grid-template-columns: 28px 1fr 178px 22px 152px 170px 84px;
             align-items: center; gap: 16px;
             padding: 8px 20px;
             background: rgba(0,0,0,0.18);
@@ -139,7 +139,7 @@
         /* ── Budget rows ─────────────────────────────────────────── */
         .budget-row {
             display: grid;
-            grid-template-columns: 28px 1fr 178px 22px 152px 68px;
+            grid-template-columns: 28px 1fr 178px 22px 152px 170px 84px;
             align-items: center; gap: 16px;
             padding: 13px 20px;
             border-bottom: 1px solid var(--border);
@@ -237,6 +237,22 @@
         .clr-accent { color: var(--accent); }
         .clr-green  { color: var(--green);  }
         .clr-amber  { color: var(--amber);  }
+
+        .spent-box { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+        .spent-val { font-size: 0.92rem; font-weight: 700; white-space: nowrap; }
+        .spent-left { font-size: 0.68rem; color: var(--muted); white-space: nowrap; }
+        .bar { height: 4px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+        .bar-fill { height: 100%; background: var(--muted); border-radius: 4px; transition: width 0.2s; }
+        .bar-fill.clr-green { background: var(--green); }
+        .bar-fill.clr-amber { background: var(--amber); }
+        .bar-fill.clr-red   { background: var(--red); }
+        .pill-near { background: rgba(245,158,11,0.1); color: var(--amber); border: 1px solid rgba(245,158,11,0.25); }
+        .pill-over { background: rgba(248,113,113,0.1); color: var(--red);   border: 1px solid rgba(248,113,113,0.25); }
+        .clr-red { color: var(--red); }
+
+        .alert { padding: 10px 16px; border-radius: var(--radius); font-size: 0.85rem; margin-bottom: 8px; border: 1px solid; }
+        .alert.over { background: rgba(248,113,113,0.08); border-color: rgba(248,113,113,0.3); }
+        .alert.near { background: rgba(245,158,11,0.08);  border-color: rgba(245,158,11,0.3); }
     </style>
     <link rel="stylesheet" href="/responsive.css"/>
     <link rel="manifest" href="/static/manifest.json"/>
@@ -274,6 +290,7 @@
 <script>document.querySelector('.nav-tab.active')?.scrollIntoView({inline:'center', block:'nearest'})</script>
 
 <main>
+    <div id="alertsEl"></div>
     <div id="cardsEl"></div>
     <div id="blockEl"></div>
 </main>
@@ -286,6 +303,7 @@
     //  (top-level only — no subcategories).
     // ════════════════════════════════════════════════════════════════
     let STATE = { categories: [] };
+    const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][new Date().getMonth()];
 
     // ════════════════════════════════════════════════════════════════
     //  HELPERS
@@ -312,6 +330,39 @@
         return sc > 0 ? monthlyTotal() / sc : null;
     };
 
+    function budState(c) {
+        const b = c.monthly_budget || 0, s = c.spent || 0;
+        if (!(b > 0)) return { key:'unset', label:'Unset',    pill:'pill-unset', clr:'',          pct:0 };
+        const pct = s / b * 100;
+        if (s > b)     return { key:'over',  label:'Over',     pill:'pill-over',  clr:'clr-red',   pct };
+        if (pct >= 80) return { key:'near',  label:'Near',     pill:'pill-near',  clr:'clr-amber', pct };
+        return                { key:'ok',    label:'On track', pill:'pill-set',   clr:'clr-green', pct };
+    }
+
+    function paintRow(c) {
+        const st = budState(c), b = c.monthly_budget || 0, s = c.spent || 0;
+        const annual = c.monthly_budget != null ? c.monthly_budget * 12 : null;
+        const el = id => document.getElementById(`${id}-${c.id}`);
+        if (!el('pill')) return;
+        el('annual').textContent = annual != null ? fmtAmt(annual) + ' /yr' : '—';
+        el('annual').className   = 'annual-val' + (annual == null ? ' unset' : '');
+        el('pill').textContent   = st.label;
+        el('pill').className     = 'status-pill ' + st.pill;
+        el('spent').textContent  = fmtAmt(s);
+        el('spent').className    = 'spent-val ' + st.clr;
+        el('left').textContent   = b > 0 ? (s > b ? fmtAmt(s - b) + ' over' : fmtAmt(b - s) + ' left') : 'No budget';
+        el('bar').style.width    = Math.min(st.pct, 100) + '%';
+        el('bar').className      = 'bar-fill ' + st.clr;
+    }
+
+    function renderAlerts() {
+        const of = k => STATE.categories.filter(c => budState(c).key === k);
+        setHtml('alertsEl', [
+            ...of('over').map(c => `<div class="alert over">🔴 <b>${esc(c.name)}</b> is over budget by ${fmtAmt(c.spent - c.monthly_budget)} this month.</div>`),
+            ...of('near').map(c => `<div class="alert near">🟠 <b>${esc(c.name)}</b> has used ${Math.round(c.spent / c.monthly_budget * 100)}% of its budget.</div>`),
+        ].join(''));
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  API STUBS
     //  GET  /api/budget/categories
@@ -333,12 +384,14 @@
     }
 
     async function apiLoad() {
-        const data = await apiFetch('/api/budget/categories');
+        const now = new Date();
+        const data = await apiFetch(`/api/budget/categories?year=${now.getFullYear()}&month=${now.getMonth() + 1}`);
         if (!data) return;
         STATE.categories = (data.categories || []).map(c => ({
             id:             c.id,
             name:           c.name,
             monthly_budget: c.monthly_budget ?? null,
+            spent:          c.spent ?? 0,
         }));
     }
 
@@ -359,20 +412,8 @@
         cat.monthly_budget = (isNaN(v) || val.trim() === '') ? null : v;
 
         // ── Update this row ──────────────────────────────────────────
-        const annual = cat.monthly_budget != null ? cat.monthly_budget * 12 : null;
-        const isSet  = cat.monthly_budget != null && cat.monthly_budget > 0;
-
-        const annualEl = document.getElementById(`annual-${catId}`);
-        const pillEl   = document.getElementById(`pill-${catId}`);
-
-        if (annualEl) {
-            annualEl.textContent = annual != null ? fmtAmt(annual) + ' /yr' : '—';
-            annualEl.className   = 'annual-val' + (annual == null ? ' unset' : '');
-        }
-        if (pillEl) {
-            pillEl.textContent = isSet ? 'Set' : 'Unset';
-            pillEl.className   = 'status-pill ' + (isSet ? 'pill-set' : 'pill-unset');
-        }
+        paintRow(cat);
+        renderAlerts();
 
         // ── Update summary cards ─────────────────────────────────────
         const mt = monthlyTotal(), at = annualTotal();
@@ -437,7 +478,6 @@
         const mb     = cat.monthly_budget;
         const annual = mb != null ? mb * 12 : null;
         const valStr = mb != null ? mb : '';
-        const isSet  = mb != null && mb > 0;
         return `
 <div class="budget-row">
     <span class="cat-index">${idx + 1}</span>
@@ -455,9 +495,12 @@
             ${annual != null ? fmtAmt(annual) + ' /yr' : '—'}
         </div>
     </div>
-    <span class="status-pill ${isSet ? 'pill-set' : 'pill-unset'}" id="pill-${cat.id}">
-        ${isSet ? 'Set' : 'Unset'}
-    </span>
+        <div class="spent-box">
+        <span class="spent-val" id="spent-${cat.id}">—</span>
+        <div class="bar"><div class="bar-fill" id="bar-${cat.id}"></div></div>
+        <span class="spent-left" id="left-${cat.id}"></span>
+    </div>
+    <span class="status-pill" id="pill-${cat.id}"></span>
 </div>`;
     }
 
@@ -492,6 +535,7 @@
             <span class="ch ch-r">Monthly Budget</span>
             <span class="ch"></span>
             <span class="ch ch-r">Annual Target</span>
+            <span class="ch ch-r">Spent (${MON})</span>
             <span class="ch ch-c">Status</span>
         </div>
         ${rows}
@@ -520,6 +564,8 @@
     function render() {
         setHtml('cardsEl', buildCards());
         setHtml('blockEl', buildBlock());
+        STATE.categories.forEach(paintRow);
+        renderAlerts();
     }
 
     // ════════════════════════════════════════════════════════════════

@@ -62,6 +62,7 @@
     .monthly-wrap { grid-column: 2 / -1; grid-row: 2; justify-content: flex-start; }
     .monthly-wrap .amount-input { flex: 1; }
     .annual-box   { grid-column: 2 / -1; grid-row: 3; flex-direction: row; align-items: center; justify-content: space-between; }
+    .spent-box    { grid-column: 2 / -1; grid-row: 4; }
     .annual-lbl   { margin-bottom: 0; }
 }
 

@@ -578,8 +578,9 @@
     const expSubV    = (sc,   mi) => getV(sc.values, mi);
     const expCatV    = (cat,  mi) => cat.subcategories.reduce((s,sc) => s + expSubV(sc, mi), 0);
     const expTotal   = mi        => STATE.expenses.reduce((s,c)  => s + expCatV(c, mi), 0);
-    const expBudCat  = (cat,  mi) => getV(cat.budget, mi);
-    const expBudTot  = mi        => STATE.expenses.reduce((s,c)  => s + expBudCat(c, mi), 0);
+    const expBudCat  = (cat,  mi) => cat.budget[mi] != null ? getV(cat.budget, mi) : (cat.target || 0);
+    const spendCls   = (spent, bud) => bud > 0 ? (spent > bud ? 'clr-red' : 'clr-green') : '';
+    const setCls     = (id, base, cls) => { const e = document.getElementById(id); if (e) e.className = `${base} ${cls}`; };    const expBudTot  = mi        => STATE.expenses.reduce((s,c)  => s + expBudCat(c, mi), 0);
 
     const netFlow    = mi => incTotal(mi) - expTotal(mi);
     const savRate    = mi => { const i = incTotal(mi); return i > 0 ? netFlow(mi)/i*100 : null; };
@@ -635,7 +636,7 @@
             id: c.id, name: c.name, values: c.values || {},
         }));
         STATE.expenses = (data.expenses || []).map(c => ({
-            id: c.id, name: c.name, budget: c.budget || {},
+            id: c.id, name: c.name, budget: c.budget || {}, target: c.target || 0,
             subcategories: (c.subcategories || []).map(sc => ({
                 id: sc.id, name: sc.name, values: sc.values || {},
             })),
@@ -692,7 +693,7 @@
         const v = parseFloat(val);
         if (isNaN(v) || val.trim() === '') delete cat.budget[mi];
         else cat.budget[String(mi)] = v;
-        setTxt('blk-exp-budget', fmtAmt(expBudTot(mi)));
+        refreshMonthDisplay(mi);
     }
     function onBudgetBlur(catId, mi, val) { apiSaveBudget(catId, STATE.year, mi, val); }
 
@@ -719,6 +720,9 @@
         setTxt ('blk-exp-total',  fmtAmt(expT));
         setTxt ('blk-exp-budget', fmtAmt(expBudTot(mi)));
         setHtml('blk-exp-delta',  makeDelta(expT, expP, false));
+        const budT = expBudTot(mi);
+        setCls('card-exp',      'sc-value', spendCls(expT, budT));
+        setCls('blk-exp-total', 'stat-val', spendCls(expT, budT));
 
         STATE.income.forEach(cat => {
             const v = incCatV(cat, mi), p = pmi !== null ? incCatV(cat, pmi) : null;
@@ -727,7 +731,8 @@
 
         STATE.expenses.forEach(cat => {
             const cv = expCatV(cat, mi), cp = pmi !== null ? expCatV(cat, pmi) : null;
-            setTxt (`expcat-tot-${cat.id}`,  fmtAmt(cv));
+            setTxt(`expcat-tot-${cat.id}`,  fmtAmt(cv));
+            setCls(`expcat-tot-${cat.id}`, 'cat-stat-val', spendCls(cv, expBudCat(cat, mi)));
             setHtml(`expcat-dlt-${cat.id}`,  makeDelta(cv, cp, false));
             cat.subcategories.forEach(sc => {
                 const sv = expSubV(sc, mi), sp = pmi !== null ? expSubV(sc, pmi) : null;
@@ -784,7 +789,7 @@
         </div>
         <div class="sum-card">
             <div class="sc-label">💳 Spent</div>
-            <div class="sc-value clr-red" id="card-exp">${fmtAmt(expT)}</div>
+            <div class="sc-value ${spendCls(expT, expBudTot(mi))}" id="card-exp">${fmtAmt(expT)}</div>
             <div class="sc-sub" id="card-exp-delta">${makeDelta(expT, expP, false)}</div>
         </div>
         <div class="sum-card">
@@ -874,11 +879,11 @@
             <div class="cat-stats" onclick="event.stopPropagation()">
                 <div class="cat-stat">
                     <div class="cat-stat-lbl">Spent</div>
-                    <div class="cat-stat-val clr-red" id="expcat-tot-${cat.id}">${fmtAmt(cv)}</div>
+                    <div class="cat-stat-val ${spendCls(cv, bv)}" id="expcat-tot-${cat.id}">${fmtAmt(cv)}</div>
                 </div>
                 <div class="cat-stat editable">
                     <div class="cat-stat-lbl">Budget</div>
-                    <input type="number" class="cat-stat-input" placeholder="—" value="${bvs}"
+                    <input type="number" class="cat-stat-input" placeholder="${cat.target ? Math.round(cat.target) : '—'}" value="${bvs}"
                         id="expcat-bud-${cat.id}"
                         oninput="onBudgetInput('${cat.id}',${mi},this.value)"
                         onblur="onBudgetBlur('${cat.id}',${mi},this.value)"/>
@@ -915,7 +920,7 @@
             <div class="block-stats">
                 <div class="stat-box">
                     <div class="stat-lbl">Total Spent</div>
-                    <div class="stat-val clr-red" id="blk-exp-total">${fmtAmt(expT)}</div>
+                    <div class="stat-val ${spendCls(expT, budT)}" id="blk-exp-total">${fmtAmt(expT)}</div>
                 </div>
                 <div class="stat-box">
                     <div class="stat-lbl">Budgeted</div>
