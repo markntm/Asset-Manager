@@ -805,6 +805,17 @@
         Object.entries(data.inv_hold_deltas   || {}).forEach(([id,d]) => setHtml(`dlt-inv-hold-${id}`,  _fmtDeltaVal(d)));
         Object.entries(data.ast_item_deltas   || {}).forEach(([id,d]) => setHtml(`dlt-ast-item-${id}`,  _fmtDeltaVal(d)));
 
+        setTxt('sc-liab',         fmtAmt(s.liabilities));
+        setHtml('sc-liab-delta',  makeDelta(s.liabilities, s.liabilities - (s.liabilities_delta ?? 0), true));
+        setTxt('blk-liab-total',  fmtAmt(s.liabilities));
+        setHtml('blk-liab-delta', makeDelta(s.liabilities, s.liabilities - (s.liabilities_delta ?? 0), true));
+        Object.entries(data.liab_cat_totals || {}).forEach(([id,v]) => setTxt(`liab-cat-tot-${id}`, fmtAmt(v)));
+        Object.entries(data.liab_cat_deltas || {}).forEach(([id,d]) => {
+            const prev = (data.liab_cat_totals?.[id] ?? 0) - (d ?? 0);
+            setHtml(`liab-cat-dlt-${id}`, makeDelta(data.liab_cat_totals?.[id], prev, true));
+        });
+        Object.entries(data.liab_item_deltas || {}).forEach(([id,d]) => setHtml(`dlt-liab-item-${id}`, _fmtDeltaVal(d, true)));
+
         updateCharts(data);
     }
 
@@ -819,7 +830,7 @@
     //  HTML BUILDERS
     // ════════════════════════════════════════════════════════════════
     function buildYearCards() {
-        const lfm = (() => { for (let m=11;m>=0;m--) { if (nwTotal(m)>0) return m; } return null; })();
+        const lfm = (() => { for (let m=11;m>=0;m--) { if (nwTotal(m)!==0) return m; } return null; })();
         const mi  = lfm ?? 0;
         const pmi = mi > 0 ? mi - 1 : null;
         const nw  = nwTotal(mi), ct = cashTotal(mi), it = invTotal(mi), at = astTotal(mi);
@@ -836,17 +847,17 @@
         <div class="sum-card">
             <div class="sc-label"><span class="sc-dot" style="background:var(--blue)"></span>Cash</div>
             <div class="sc-value clr-blue" id="sc-cash">${fmtAmt(ct)}</div>
-            <div class="sc-sub" id="sc-cash-pct">${nw>0?(ct/nw*100).toFixed(1)+'% of total':'—'}</div>
+            <div class="sc-sub" id="sc-cash-pct">${gross>0?(ct/gross*100).toFixed(1)+'% of total':'—'}</div>
         </div>
         <div class="sum-card">
             <div class="sc-label"><span class="sc-dot" style="background:var(--green)"></span>Investments</div>
             <div class="sc-value clr-green" id="sc-inv">${fmtAmt(it)}</div>
-            <div class="sc-sub" id="sc-inv-pct">${nw>0?(it/nw*100).toFixed(1)+'% of total':'—'}</div>
+            <div class="sc-sub" id="sc-inv-pct">${gross>0?(ct/gross*100).toFixed(1)+'% of total':'—'}</div>
         </div>
         <div class="sum-card">
             <div class="sc-label"><span class="sc-dot" style="background:var(--amber)"></span>Assets</div>
             <div class="sc-value clr-amber" id="sc-ast">${fmtAmt(at)}</div>
-            <div class="sc-sub" id="sc-ast-pct">${nw>0?(at/nw*100).toFixed(1)+'% of total':'—'}</div>
+            <div class="sc-sub" id="sc-ast-pct">${gross>0?(ct/gross*100).toFixed(1)+'% of total':'—'}</div>
         </div>
         <div class="sum-card">
             <div class="sc-label"><span class="sc-dot" style="background:var(--red)"></span>Liabilities</div>
@@ -1261,17 +1272,6 @@
         });
     }
 
-    setTxt('sc-liab',        fmtAmt(s.liabilities));
-    setHtml('sc-liab-delta', makeDelta(s.liabilities, s.liabilities - (s.liabilities_delta ?? 0), true));
-    setTxt('blk-liab-total', fmtAmt(s.liabilities));
-    setHtml('blk-liab-delta', makeDelta(s.liabilities, s.liabilities - (s.liabilities_delta ?? 0), true));
-    Object.entries(data.liab_cat_totals || {}).forEach(([id,v]) => setTxt(`liab-cat-tot-${id}`, fmtAmt(v)));
-    Object.entries(data.liab_cat_deltas || {}).forEach(([id,d]) => {
-        const prev = (data.liab_cat_totals?.[id] ?? 0) - (d ?? 0);
-        setHtml(`liab-cat-dlt-${id}`, makeDelta(data.liab_cat_totals?.[id], prev, true));
-    });
-    Object.entries(data.liab_item_deltas || {}).forEach(([id,d]) => setHtml(`dlt-liab-item-${id}`, _fmtDeltaVal(d, true)));
-
     function updateCharts(data) {
         if (!lineChart || !pieChart) return;
 
@@ -1558,7 +1558,8 @@
         } else if (_mMode === 'liab-item') {
             const r = await apiAddLiabItem(_mParentId, name);
             const cat = STATE.liabilities.find(c => c.id === _mParentId);
-            if (cat) cat.items.push({ id: r?.id || tmpId(), name, values:{} });
+            if (cat) cat.items.push({id: r?.id || tmpId(), name, values: {} });
+        }
 
         closeModal();
         STATE.activeView === 'year' ? renderYearView() : renderMonthView(STATE.activeView);
@@ -1593,7 +1594,7 @@
         await apiLoadYear(cur);
         initCharts();
         switchView('year');
-    })();}
+    })();
 </script>
 </body>
 </html>
