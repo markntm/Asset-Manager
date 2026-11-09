@@ -59,6 +59,31 @@
         .imports { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:16px; overflow-x:auto; }
         .imports summary { padding:12px 20px; cursor:pointer; font-size:.85rem; font-weight:600; }
         .imports table { margin-top:0; }
+
+        .flag { font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; padding:2px 8px; border-radius:20px; border:1px solid; margin-left:6px; white-space:nowrap; }
+        .flag.high         { color:var(--red);    background:rgba(248,113,113,0.1); border-color:rgba(248,113,113,0.3); }
+        .flag.new_merchant { color:#f59e0b;         background:rgba(245,158,11,0.1);  border-color:rgba(245,158,11,0.3); }
+        .flag.recurring    { color:var(--accent); background:rgba(108,99,255,0.12); border-color:rgba(108,99,255,0.25); }
+
+        .pager { display:flex; justify-content:center; align-items:center; gap:14px; margin-top:16px; font-size:0.85rem; color:var(--muted); }
+        .btn-cancel:disabled { opacity:0.4; cursor:default; }
+
+        /* Mobile: each row becomes a stacked card, no horizontal scroll */
+        @media (max-width: 700px) {
+            .txn-panel { overflow-x: visible; }
+            .txn-panel table, .txn-panel tbody { display:block; }
+            .txn-panel thead { display:none; }
+            .txn-panel tbody tr { display:grid; grid-template-columns:1fr auto; gap:4px 12px; padding:12px 14px; border-bottom:1px solid var(--border); }
+            .txn-panel tbody tr:last-child { border-bottom:none; }
+            .txn-panel tbody td { display:block; padding:0; border:none; }
+            .c-merch { grid-column:1; grid-row:1; font-weight:600; min-width:0; overflow-wrap:anywhere; }
+            .c-amt   { grid-column:2; grid-row:1; }
+            .c-date  { grid-column:1; grid-row:2; font-size:0.78rem; }
+            .c-bank  { grid-column:2; grid-row:2; font-size:0.78rem; text-align:right; }
+            .c-cat   { grid-column:1 / -1; grid-row:3; font-size:0.8rem; }
+            .txn-panel tbody tr .row-actions { grid-column:1 / -1; grid-row:4; opacity:1; }
+            .txn-panel td.empty { grid-column:1 / -1; padding:30px 14px; }
+        }
     </style>
     <link rel="stylesheet" href="/responsive.css"/>
     <link rel="manifest" href="/static/manifest.json"/>
@@ -109,6 +134,19 @@
             <option value="amount-desc">Amount: high → low</option>
             <option value="amount-asc">Amount: low → high</option>
         </select>
+        <select id="filterFlag">
+            <option value="">All transactions</option>
+            <option value="any">⚑ Any flag</option>
+            <option value="high">⚑ High amount</option>
+            <option value="new_merchant">⚑ New merchant</option>
+            <option value="recurring">⚑ Recurring</option>
+        </select>
+        <select id="pageSize">
+            <option value="10">10 per page</option>
+            <option value="25" selected>25 per page</option>
+            <option value="50">50 per page</option>
+            <option value="100">100 per page</option>
+        </select>
         <span class="count" id="count"></span>
         <button class="btn-ok" onclick="openModal()">+ Add Transaction</button>
     </div>
@@ -118,6 +156,12 @@
             <thead><tr><th>Date</th><th>Merchant</th><th>Category</th><th>Bank</th><th class="r">Amount</th><th></th></tr></thead>
             <tbody id="txnBody"></tbody>
         </table>
+    </div>
+
+    <div class="pager">
+        <button class="btn-cancel" id="prevBtn" onclick="goPage(-1)">‹ Prev</button>
+        <span id="pageInfo"></span>
+        <button class="btn-cancel" id="nextBtn" onclick="goPage(1)">Next ›</button>
     </div>
 </main>
 
@@ -175,29 +219,48 @@
     }
 
     // ── Render ───────────────────────────────────────────────────────
+    const FLAGS = {
+        high:         ['High amount',  'Unusually large for its category'],
+        new_merchant: ['New merchant', 'First time seen, and larger than typical'],
+        recurring:    ['Recurring',    'Same merchant and similar amount in 3+ months'],
+    };
+    const flagTags = t => (t.flags || []).map(f => `<span class="flag ${f}" title="${FLAGS[f][1]}">${FLAGS[f][0]}</span>`).join('');
+    let page = 1;
+
     function render() {
-        const bank = $('filterBank').value;
+        const bank = $('filterBank').value, flag = $('filterFlag').value;
         const [key, dir] = $('sortBy').value.split('-');
         const sgn = dir === 'asc' ? 1 : -1;
         const rows = STATE.txns
-            .filter(t => !bank || t.institution_id === bank)
+            .filter(t => (!bank || t.institution_id === bank)
+                && (!flag || (flag === 'any' ? t.flags.length : t.flags.includes(flag))))
             .sort((a, b) => (key === 'amount' ? sgn * (a.amount - b.amount) : sgn * a.date.localeCompare(b.date)));
 
-        $('count').textContent = `${rows.length} transaction${rows.length === 1 ? '' : 's'}`;
-        $('txnBody').innerHTML = rows.length ? rows.map(t => `
+        const size  = +$('pageSize').value, pages = Math.max(1, Math.ceil(rows.length / size));
+        page = Math.min(page, pages);
+        const start = (page - 1) * size, shown = rows.slice(start, start + size);
+
+        $('count').textContent    = rows.length ? `${start + 1}–${start + shown.length} of ${rows.length}` : '0 transactions';
+        $('pageInfo').textContent = `Page ${page} of ${pages}`;
+        $('prevBtn').disabled     = page <= 1;
+        $('nextBtn').disabled     = page >= pages;
+
+        $('txnBody').innerHTML = shown.length ? shown.map(t => `
         <tr>
-            <td class="muted">${fmtDate(t.date)}</td>
-            <td>${esc(t.merchant)}</td>
-            <td>${catLabel(t)}</td>
-            <td class="muted">${esc(bankName(t.institution_id))}</td>
-            <td class="r ${t.is_transfer ? 'dlt-nil' : t.amount < 0 ? 'dlt-dn' : 'dlt-up'}">${money(t.amount)}</td>
+            <td class="c-date muted">${fmtDate(t.date)}</td>
+            <td class="c-merch">${esc(t.merchant)}</td>
+            <td class="c-cat">${catLabel(t)}${flagTags(t)}</td>
+            <td class="c-bank muted">${esc(bankName(t.institution_id))}</td>
+            <td class="c-amt r ${t.is_transfer ? 'dlt-nil' : t.amount < 0 ? 'dlt-dn' : 'dlt-up'}">${money(t.amount)}</td>
             <td class="row-actions">
                 <button onclick="openModal('${t.id}')" title="Edit">✎</button>
                 <button class="del" onclick="doDelete('${t.id}')" title="Delete">🗑</button>
             </td>
         </tr>`).join('')
-            : '<tr><td colspan="6" class="empty">No transactions yet — add one above.</td></tr>';
+            : '<tr><td colspan="6" class="empty">No transactions match.</td></tr>';
     }
+
+    function goPage(d) { page += d; render(); window.scrollTo({ top: 0 }); }
 
     function fillSelects() {
         const cur = $('filterBank').value;
@@ -249,14 +312,14 @@
         const r = await apiFetch(editId ? `/api/transactions/${editId}` : '/api/transactions',
             { method: editId ? 'PUT' : 'POST', body: JSON.stringify(body) });
         if (!r) { $('mErr').textContent = 'Could not save. Check the fields and try again.'; return; }
-        STATE.txns = editId ? STATE.txns.map(t => t.id === editId ? r : t) : [r, ...STATE.txns];
+        await load();
         closeModal(); render();
     }
 
     async function doDelete(id) {
         if (!confirm('Delete this transaction?')) return;
         if (await apiFetch(`/api/transactions/${id}`, { method: 'DELETE' })) {
-            STATE.txns = STATE.txns.filter(t => t.id !== id);
+            await load();
             render();
         }
     }
@@ -282,14 +345,18 @@
         }).join('');
     }
 
+    async function load() {
+        const data = await apiFetch('/api/transactions');
+        if (data) STATE = { txns: data.transactions, banks: data.banks, income: data.income, expenses: data.expenses };
+    }
+
     // ── Init ─────────────────────────────────────────────────────────
     (async function init() {
         $('hDate').textContent = new Date().toLocaleDateString('en-US', { month:'long', year:'numeric' });
-        const data = await apiFetch('/api/transactions');
-        if (data) STATE = { txns: data.transactions, banks: data.banks, income: data.income, expenses: data.expenses };
+        await load();
         fillSelects();
-        $('filterBank').addEventListener('change', render);
-        $('sortBy').addEventListener('change', render);
+        ['filterBank', 'sortBy', 'filterFlag', 'pageSize'].forEach(id =>
+            $(id).addEventListener('change', () => { page = 1; render(); }));
         $('overlay').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
         document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
         render();

@@ -121,10 +121,13 @@
         .view.hidden { display: none; }
 
         .cards-row {
-            display: grid; grid-template-columns: repeat(4,1fr);
+            display: grid; grid-template-columns: repeat(5,1fr);
             gap: 14px; margin-bottom: 20px;
         }
         @media (max-width: 860px) { .cards-row { grid-template-columns: repeat(2,1fr); } }
+
+        .liab-title { color: var(--red); }
+        .clr-red    { color: var(--red); }
 
         .sum-card {
             background: var(--surface); border: 1px solid var(--border);
@@ -492,6 +495,7 @@
         <div id="cashBlockEl"></div>
         <div id="invBlockEl"></div>
         <div id="astBlockEl"></div>
+        <div id="liabBlockEl"></div>
         <div id="nwBarEl"></div>
     </div>
 
@@ -525,12 +529,14 @@
         'Jul','Aug','Sep','Oct','Nov','Dec'];
 
     // Summary mode: 3 group colours
-    const PIE_COLORS = ['#60a5fa','#4ade80','#f59e0b'];
+    const PIE_COLORS = ['#60a5fa','#4ade80','#f59e0b','#f87171'];
 
     // Detailed mode: per-group colour palettes (blue → cash, green → inv, amber → asset)
     const CASH_PALETTE = ['#60a5fa','#3b82f6','#2563eb','#93c5fd','#bfdbfe'];
     const INV_PALETTE  = ['#4ade80','#22c55e','#16a34a','#86efac','#bbf7d0'];
     const AST_PALETTE  = ['#f59e0b','#d97706','#b45309','#fcd34d','#fde68a'];
+    const LIAB_PALETTE = ['#f87171','#ef4444','#dc2626','#fca5a5','#fecaca'];
+    const PIE_LABELS   = ['Cash','Investments','Assets','Liabilities'];
 
     const MODAL_META = {
         'cash-inst':  { title:'Add Institution',   sub:'Appears across all years.',  lbl:'Institution name  (e.g. Capital One, Chase)' },
@@ -539,6 +545,8 @@
         'inv-hold':   { title:'Add Holding',        sub:'Under selected brokerage.',  lbl:'Ticker / Name  (e.g. VOO, AAPL, BTC)' },
         'ast-cat':    { title:'Add Asset Category', sub:'Appears across all years.',  lbl:'Category name  (e.g. Real Estate, Vehicle)' },
         'ast-item':   { title:'Add Asset',          sub:'Under selected category.',   lbl:'Asset name  (e.g. Home Value, Car)' },
+        'liab-cat':   { title:'Add Liability Category', sub:'Appears across all years.',  lbl:'Category name  (e.g. Credit Cards, Loans)' },
+        'liab-item':  { title:'Add Liability',          sub:'Enter balances as positive amounts owed.', lbl:'Liability name  (e.g. Visa, Student Loan)' },
     };
 
     // ════════════════════════════════════════════════════════════════
@@ -550,6 +558,7 @@
         cash:        [],
         investments: [],
         assets:      [],
+        liabilities: [],
     };
 
     // ── Pie detail toggle ────────────────────────────────────────
@@ -568,11 +577,11 @@
     const setHtml = (id, h) => { const e = document.getElementById(id); if (e) e.innerHTML  = h; };
     const _getV   = (obj, mi) => parseFloat(obj?.[String(mi)] ?? obj?.[mi]) || 0;
 
-    function makeDelta(curr, prev) {
+    function makeDelta(curr, prev, invert = false) {
         if (curr == null || prev == null) return `<span class="dlt-nil">—</span>`;
         const d = curr - prev;
         if (Math.abs(d) < 0.005)         return `<span class="dlt-nil">—</span>`;
-        const cls = d >= 0 ? 'dlt-up' : 'dlt-dn';
+        const cls = (d >= 0) !== invert ? 'dlt-up' : 'dlt-dn';
         return `<span class="${cls}">${d >= 0 ? '▲' : '▼'}&nbsp;${fmtAmt(Math.abs(d))}</span>`;
     }
 
@@ -591,7 +600,11 @@
     const astCatT   = (cat, mi)  => cat.items.reduce((s,i) => s + astItemV(i,mi), 0);
     const astTotal  = mi         => STATE.assets.reduce((s,c) => s + astCatT(c,mi), 0);
 
-    const nwTotal   = mi         => cashTotal(mi) + invTotal(mi) + astTotal(mi);
+    const liabItemV = (item, mi) => _getV(item.values, mi);
+    const liabCatT  = (cat, mi)  => cat.items.reduce((s,i) => s + liabItemV(i,mi), 0);
+    const liabTotal = mi         => STATE.liabilities.reduce((s,c) => s + liabCatT(c,mi), 0);
+
+    const nwTotal   = mi         => cashTotal(mi) + invTotal(mi) + astTotal(mi) - liabTotal(mi);
 
     // ════════════════════════════════════════════════════════════════
     //  PIE DETAIL TOGGLE
@@ -629,6 +642,7 @@
         STATE.cash        = data.cash        || [];
         STATE.investments = data.investments || [];
         STATE.assets      = data.assets      || [];
+        STATE.liabilities = data.liabilities || [];
     }
 
     const apiSaveCell    = (itemId, year, mi, val) => apiFetch('/api/networth/cells', {
@@ -652,6 +666,10 @@
     const apiAddAstItem   = (id, n) => apiFetch(`/api/networth/assets/categories/${id}/items`, { method:'POST', body:JSON.stringify({name:n}) });
     const apiDelAstCat    = id      => apiFetch(`/api/networth/assets/categories/${id}`,   { method:'DELETE' });
     const apiDelAstItem   = id      => apiFetch(`/api/networth/assets/items/${id}`,        { method:'DELETE' });
+    const apiAddLiabCat   = n       => apiFetch('/api/networth/liabilities/categories',          { method:'POST', body:JSON.stringify({name:n}) });
+    const apiAddLiabItem  = (id, n) => apiFetch(`/api/networth/liabilities/categories/${id}/items`, { method:'POST', body:JSON.stringify({name:n}) });
+    const apiDelLiabCat   = id      => apiFetch(`/api/networth/liabilities/categories/${id}`,   { method:'DELETE' });
+    const apiDelLiabItem  = id      => apiFetch(`/api/networth/liabilities/items/${id}`,        { method:'DELETE' });
 
     // ════════════════════════════════════════════════════════════════
     //  INPUT HANDLERS
@@ -714,6 +732,20 @@
         const data = await apiSaveCell(itemId, year, mi, val);
         if (data) applyNetWorthSummary(data, mi);
     }
+    function onLiabInput(catId, itemId, mi, val) {
+        const cat = STATE.liabilities.find(c => c.id === catId);
+        if (!cat) return;
+        const item = cat.items.find(i => i.id === itemId);
+        if (!item) return;
+        _storeVal(item.values, mi, val);
+        setTxt(`liab-cat-tot-${catId}`, fmtAmt(liabCatT(cat, mi)));
+        setTxt('blk-liab-total',        fmtAmt(liabTotal(mi)));
+        setTxt('nw-bar-total',          fmtAmt(nwTotal(mi)));
+    }
+    async function onLiabBlur(itemId, year, mi, val) {
+        const data = await apiSaveCell(itemId, year, mi, val);
+        if (data) applyNetWorthSummary(data, mi);
+    }
 
     // ════════════════════════════════════════════════════════════════
     //  PATTERN A DOM UPDATE  (after every onBlur)
@@ -773,13 +805,24 @@
         Object.entries(data.inv_hold_deltas   || {}).forEach(([id,d]) => setHtml(`dlt-inv-hold-${id}`,  _fmtDeltaVal(d)));
         Object.entries(data.ast_item_deltas   || {}).forEach(([id,d]) => setHtml(`dlt-ast-item-${id}`,  _fmtDeltaVal(d)));
 
+        setTxt('sc-liab',         fmtAmt(s.liabilities));
+        setHtml('sc-liab-delta',  makeDelta(s.liabilities, s.liabilities - (s.liabilities_delta ?? 0), true));
+        setTxt('blk-liab-total',  fmtAmt(s.liabilities));
+        setHtml('blk-liab-delta', makeDelta(s.liabilities, s.liabilities - (s.liabilities_delta ?? 0), true));
+        Object.entries(data.liab_cat_totals || {}).forEach(([id,v]) => setTxt(`liab-cat-tot-${id}`, fmtAmt(v)));
+        Object.entries(data.liab_cat_deltas || {}).forEach(([id,d]) => {
+            const prev = (data.liab_cat_totals?.[id] ?? 0) - (d ?? 0);
+            setHtml(`liab-cat-dlt-${id}`, makeDelta(data.liab_cat_totals?.[id], prev, true));
+        });
+        Object.entries(data.liab_item_deltas || {}).forEach(([id,d]) => setHtml(`dlt-liab-item-${id}`, _fmtDeltaVal(d, true)));
+
         updateCharts(data);
     }
 
-    function _fmtDeltaVal(d) {
+    function _fmtDeltaVal(d, invert = false) {
         if (d == null) return `<span class="dlt-nil">—</span>`;
         if (Math.abs(d) < 0.005) return `<span class="dlt-nil">—</span>`;
-        const cls = d >= 0 ? 'dlt-up' : 'dlt-dn';
+        const cls = (d >= 0) !== invert ? 'dlt-up' : 'dlt-dn';
         return `<span class="${cls}">${d >= 0 ? '▲' : '▼'}&nbsp;${fmtAmt(Math.abs(d))}</span>`;
     }
 
@@ -787,12 +830,13 @@
     //  HTML BUILDERS
     // ════════════════════════════════════════════════════════════════
     function buildYearCards() {
-        const lfm = (() => { for (let m=11;m>=0;m--) { if (nwTotal(m)>0) return m; } return null; })();
+        const lfm = (() => { for (let m=11;m>=0;m--) { if (nwTotal(m)!==0) return m; } return null; })();
         const mi  = lfm ?? 0;
         const pmi = mi > 0 ? mi - 1 : null;
         const nw  = nwTotal(mi), ct = cashTotal(mi), it = invTotal(mi), at = astTotal(mi);
         const nwp = pmi !== null ? nwTotal(pmi) : null;
         const mom = nwp !== null ? nw - nwp : null;
+        const lt = liabTotal(mi), gross = ct + it + at;
         return `
     <div class="cards-row">
         <div class="sum-card">
@@ -803,17 +847,22 @@
         <div class="sum-card">
             <div class="sc-label"><span class="sc-dot" style="background:var(--blue)"></span>Cash</div>
             <div class="sc-value clr-blue" id="sc-cash">${fmtAmt(ct)}</div>
-            <div class="sc-sub" id="sc-cash-pct">${nw>0?(ct/nw*100).toFixed(1)+'% of total':'—'}</div>
+            <div class="sc-sub" id="sc-cash-pct">${gross>0?(ct/gross*100).toFixed(1)+'% of total':'—'}</div>
         </div>
         <div class="sum-card">
             <div class="sc-label"><span class="sc-dot" style="background:var(--green)"></span>Investments</div>
             <div class="sc-value clr-green" id="sc-inv">${fmtAmt(it)}</div>
-            <div class="sc-sub" id="sc-inv-pct">${nw>0?(it/nw*100).toFixed(1)+'% of total':'—'}</div>
+            <div class="sc-sub" id="sc-inv-pct">${gross>0?(ct/gross*100).toFixed(1)+'% of total':'—'}</div>
         </div>
         <div class="sum-card">
             <div class="sc-label"><span class="sc-dot" style="background:var(--amber)"></span>Assets</div>
             <div class="sc-value clr-amber" id="sc-ast">${fmtAmt(at)}</div>
-            <div class="sc-sub" id="sc-ast-pct">${nw>0?(at/nw*100).toFixed(1)+'% of total':'—'}</div>
+            <div class="sc-sub" id="sc-ast-pct">${gross>0?(ct/gross*100).toFixed(1)+'% of total':'—'}</div>
+        </div>
+        <div class="sum-card">
+            <div class="sc-label"><span class="sc-dot" style="background:var(--red)"></span>Liabilities</div>
+            <div class="sc-value clr-red" id="sc-liab">${fmtAmt(lt)}</div>
+            <div class="sc-sub" id="sc-liab-pct">${gross>0?(lt/gross*100).toFixed(1)+'% of assets':'—'}</div>
         </div>
     </div>`;
     }
@@ -823,6 +872,7 @@
         const nw  = nwTotal(mi), ct = cashTotal(mi), it = invTotal(mi), at = astTotal(mi);
         const nwp = pmi !== null ? nwTotal(pmi) : null;
         const mom = nwp !== null ? nw - nwp : null;
+        const lt = liabTotal(mi);
         return `
     <div class="cards-row">
         <div class="sum-card">
@@ -844,6 +894,11 @@
             <div class="sc-label"><span class="sc-dot" style="background:var(--amber)"></span>Assets</div>
             <div class="sc-value clr-amber" id="sc-ast">${fmtAmt(at)}</div>
             <div class="sc-sub" id="sc-ast-delta">${_fmtDeltaVal(pmi!==null?at-astTotal(pmi):null)}</div>
+        </div>
+        <div class="sum-card">
+            <div class="sc-label"><span class="sc-dot" style="background:var(--red)"></span>Liabilities</div>
+            <div class="sc-value clr-red" id="sc-liab">${fmtAmt(lt)}</div>
+            <div class="sc-sub" id="sc-liab-delta">${_fmtDeltaVal(pmi!==null?lt-liabTotal(pmi):null, true)}</div>
         </div>
     </div>`;
     }
@@ -1066,6 +1121,76 @@
     </div>`;
     }
 
+    function buildLiabItemRow(item, catId, mi) {
+        const v = item.values[String(mi)] ?? item.values[mi] ?? '';
+        return `
+    <div class="leaf-row">
+        <span class="row-name">${esc(item.name)}</span>
+        <input type="number" class="amount-input" placeholder="—" value="${v}"
+            oninput="onLiabInput('${catId}','${item.id}',${mi},this.value)"
+            onblur="onLiabBlur('${item.id}',${STATE.year},${mi},this.value)"/>
+        <span class="row-delta" id="dlt-liab-item-${item.id}">${_fmtDeltaVal(null)}</span>
+        <button class="btn-del" onclick="doDelLiabItem('${catId}','${item.id}')">✕</button>
+    </div>`;
+    }
+
+    function buildLiabCategory(cat, mi) {
+        const total = liabCatT(cat, mi);
+        const rows  = cat.items.map(i => buildLiabItemRow(i, cat.id, mi)).join('');
+        return `
+    <div class="inst-block" id="liab-cat-${cat.id}">
+        <div class="inst-header" onclick="toggleInst('liab-cat-${cat.id}')">
+            <span class="chevron" id="chv-liab-cat-${cat.id}">▼</span>
+            <span class="inst-name">${esc(cat.name)}</span>
+            <div class="cat-stats" onclick="event.stopPropagation()">
+                <div class="cat-stat">
+                    <div class="cat-stat-lbl">Owed</div>
+                    <div class="cat-stat-val clr-red" id="liab-cat-tot-${cat.id}">${fmtAmt(total)}</div>
+                </div>
+                <div class="cat-stat">
+                    <div class="cat-stat-lbl">vs Last Month</div>
+                    <div class="cat-stat-val" id="liab-cat-dlt-${cat.id}">${_fmtDeltaVal(null)}</div>
+                </div>
+            </div>
+            <button class="btn-del" onclick="event.stopPropagation();doDelLiabCat('${cat.id}')">✕</button>
+        </div>
+        <div class="inst-body" id="liab-cat-${cat.id}-body">
+            ${rows || '<div class="empty-msg" style="padding-left:44px">No liabilities yet.</div>'}
+            <div class="add-row indented">
+                <button class="btn-add-row" onclick="openModal('liab-item','${cat.id}')">+ Add Liability</button>
+            </div>
+        </div>
+    </div>`;
+    }
+
+    function buildLiabBlock(mi) {
+        const total = liabTotal(mi);
+        const cats  = STATE.liabilities.map(c => buildLiabCategory(c, mi)).join('');
+        return `
+    <div class="cf-block" id="liabBlock">
+        <div class="block-header" onclick="toggleCfBlock('liabBlock')">
+            <span class="chevron" id="chv-liabBlock">▼</span>
+            <span class="block-title liab-title">Liabilities</span>
+            <div class="block-stats">
+                <div class="stat-box">
+                    <div class="stat-lbl">Total Owed</div>
+                    <div class="stat-val clr-red" id="blk-liab-total">${fmtAmt(total)}</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-lbl">vs Last Month</div>
+                    <div class="stat-val" id="blk-liab-delta">${_fmtDeltaVal(null)}</div>
+                </div>
+            </div>
+        </div>
+        <div class="block-body" id="liabBlock-body">
+            ${cats || '<div class="empty-msg">No liability categories yet — add one below.</div>'}
+            <div class="add-row">
+                <button class="btn-add-row" onclick="openModal('liab-cat')">+ Add Category</button>
+            </div>
+        </div>
+    </div>`;
+    }
+
     function buildNwBar(mi) {
         return `
     <div class="nw-total-bar">
@@ -1110,6 +1235,7 @@
                     { label:'Cash',        data:Array(12).fill(null), borderColor:'#60a5fa', backgroundColor:'transparent', borderWidth:1.5, tension:0.4, pointRadius:2, borderDash:[4,3], spanGaps:false },
                     { label:'Investments', data:Array(12).fill(null), borderColor:'#4ade80', backgroundColor:'transparent', borderWidth:1.5, tension:0.4, pointRadius:2, borderDash:[4,3], spanGaps:false },
                     { label:'Assets',      data:Array(12).fill(null), borderColor:'#f59e0b', backgroundColor:'transparent', borderWidth:1.5, tension:0.4, pointRadius:2, borderDash:[4,3], spanGaps:false },
+                    { label:'Liabilities', data:Array(12).fill(null), borderColor:'#f87171', backgroundColor:'transparent', borderWidth:1.5, tension:0.4, pointRadius:2, borderDash:[4,3], spanGaps:false },
                 ],
             },
             options: {
@@ -1126,8 +1252,8 @@
         pieChart = new Chart(document.getElementById('pieChart'), {
             type: 'doughnut',
             data: {
-                labels: ['Cash','Investments','Assets'],
-                datasets:[{ data:[0,0,0], backgroundColor: PIE_COLORS,
+                labels: PIE_LABELS,
+                datasets:[{ data:[0,0,0,0], backgroundColor: PIE_COLORS,
                     borderColor:'#1a1d27', borderWidth:3, hoverOffset:6 }],
             },
             options: {
@@ -1154,10 +1280,12 @@
 
         // ── Line chart (unchanged) ───────────────────────────────────────────
         const toP = v => v > 0 ? v : null;
-        lineChart.data.datasets[0].data = (data.net_worth_series  || Array(12).fill(0)).map(toP);
+        const toN = v => v !== 0 ? v : null;
+        lineChart.data.datasets[0].data = (data.net_worth_series  || Array(12).fill(0)).map(toN);
         lineChart.data.datasets[1].data = (data.group_series?.cash        || Array(12).fill(0)).map(toP);
         lineChart.data.datasets[2].data = (data.group_series?.investments || Array(12).fill(0)).map(toP);
         lineChart.data.datasets[3].data = (data.group_series?.assets      || Array(12).fill(0)).map(toP);
+        lineChart.data.datasets[4].data = (data.group_series?.liabilities || Array(12).fill(0)).map(toP);
         lineChart.update();
 
         // ── Allocation pie — Summary vs. Detailed ────────────────────────────
@@ -1180,11 +1308,15 @@
                 const v = astCatT(cat, lfm);
                 if (v > 0) { labels.push(cat.name); values.push(v); colors.push(AST_PALETTE[i % AST_PALETTE.length]); }
             });
+            STATE.liabilities.forEach((cat, i) => {
+                const v = liabCatT(cat, lfm);
+                if (v > 0) { labels.push(cat.name); values.push(v); colors.push(LIAB_PALETTE[i % LIAB_PALETTE.length]); }
+            });
 
             if (labels.length === 0) {
                 // No data at lfm — fall back to summary zeros
-                pieChart.data.labels                          = ['Cash','Investments','Assets'];
-                pieChart.data.datasets[0].data                = [0, 0, 0];
+                pieChart.data.labels                          = PIE_LABELS;
+                pieChart.data.datasets[0].data                = [0, 0, 0, 0];
                 pieChart.data.datasets[0].backgroundColor     = PIE_COLORS;
             } else {
                 pieChart.data.labels                          = labels;
@@ -1193,11 +1325,12 @@
             }
         } else {
             // Summary: three group buckets
-            pieChart.data.labels                          = ['Cash','Investments','Assets'];
+            pieChart.data.labels                          = PIE_LABELS;
             pieChart.data.datasets[0].data                = [
                 data.summary?.cash        ?? 0,
                 data.summary?.investments ?? 0,
                 data.summary?.assets      ?? 0,
+                data.summary?.liabilities ?? 0,
             ];
             pieChart.data.datasets[0].backgroundColor     = PIE_COLORS;
         }
@@ -1267,6 +1400,17 @@
         if (cat) cat.items = cat.items.filter(i => i.id !== itemId);
         if (STATE.activeView !== 'year') renderMonthView(STATE.activeView);
     }
+    async function doDelLiabCat(id) {
+        await apiDelLiabCat(id);
+        STATE.liabilities = STATE.liabilities.filter(c => c.id !== id);
+        STATE.activeView !== 'year' ? renderMonthView(STATE.activeView) : renderYearView();
+    }
+    async function doDelLiabItem(catId, itemId) {
+        await apiDelLiabItem(itemId);
+        const cat = STATE.liabilities.find(c => c.id === catId);
+        if (cat) cat.items = cat.items.filter(i => i.id !== itemId);
+        if (STATE.activeView !== 'year') renderMonthView(STATE.activeView);
+    }
 
     // ════════════════════════════════════════════════════════════════
     //  VIEW RENDERERS
@@ -1275,23 +1419,25 @@
         setHtml('yearCardsEl', buildYearCards());
 
         // ── BUG FIX: use the latest filled month (not hard-coded Dec) ─────────
-        const lfm = (() => { for (let m=11;m>=0;m--) { if (nwTotal(m)>0) return m; } return null; })();
+        const lfm = (() => { for (let m=11;m>=0;m--) { if (nwTotal(m)!==0) return m; } return null; })();
         const mi  = lfm ?? 0;
 
         const nwS = Array.from({length:12}, (_,m) => nwTotal(m));
         const cS  = Array.from({length:12}, (_,m) => cashTotal(m));
         const iS  = Array.from({length:12}, (_,m) => invTotal(m));
         const aS  = Array.from({length:12}, (_,m) => astTotal(m));
+        const lS = Array.from({length:12}, (_,m) => liabTotal(m));
 
         updateCharts({
             year:              STATE.year,
             latest_month_idx:  lfm,
             net_worth_series:  nwS,
-            group_series:      { cash:cS, investments:iS, assets:aS },
+            group_series:      { cash:cS, investments:iS, assets:aS, liabilities:lS },
             summary: {
                 cash:        cashTotal(mi),   // ← was cashTotal(11)
                 investments: invTotal(mi),    // ← was invTotal(11)
                 assets:      astTotal(mi),    // ← was astTotal(11)
+                liabilities: liabTotal(mi),
             },
         });
     }
@@ -1301,6 +1447,7 @@
         setHtml('cashBlockEl',  buildCashBlock(mi));
         setHtml('invBlockEl',   buildInvBlock(mi));
         setHtml('astBlockEl',   buildAstBlock(mi));
+        setHtml('liabBlockEl',  buildLiabBlock(mi));
         setHtml('nwBarEl',      buildNwBar(mi));
     }
 
@@ -1405,6 +1552,13 @@
             const r = await apiAddAstItem(_mParentId, name);
             const cat = STATE.assets.find(c => c.id === _mParentId);
             if (cat) cat.items.push({ id: r?.id || tmpId(), name, values:{} });
+        } else if (_mMode === 'liab-cat') {
+            const r = await apiAddLiabCat(name);
+            STATE.liabilities.push({ id: r?.id || tmpId(), name, items:[] });
+        } else if (_mMode === 'liab-item') {
+            const r = await apiAddLiabItem(_mParentId, name);
+            const cat = STATE.liabilities.find(c => c.id === _mParentId);
+            if (cat) cat.items.push({id: r?.id || tmpId(), name, values: {} });
         }
 
         closeModal();

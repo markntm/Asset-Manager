@@ -113,15 +113,16 @@ def expense_category_year_totals(expense_cats: list[dict]) -> list[dict]:
 # ════════════════════════════════════════════════════════════════════
 
 def budget_category_value(cat: dict, month_idx: int) -> float:
-    """The user-entered monthly budget for a single expense category."""
-    return _get(cat.get("budget", {}), month_idx)
+    """Per-month override if one is stored, else the Budget-page target."""
+    b = cat.get("budget", {})
+    if b.get(str(month_idx)) is not None or b.get(month_idx) is not None:
+        return _get(b, month_idx)
+    return float(cat.get("target") or 0)
 
 
 def budget_month_total(expense_cats: list[dict], month_idx: int) -> float:
-    """Sum of all category budgets for one month (shown in the expense block header)."""
-    return round(
-        sum(_get(c.get("budget", {}), month_idx) for c in expense_cats), 2
-    )
+    """Sum of effective category budgets for one month."""
+    return round(sum(budget_category_value(c, month_idx) for c in expense_cats), 2)
 
 
 # ════════════════════════════════════════════════════════════════════

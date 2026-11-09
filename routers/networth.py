@@ -38,7 +38,7 @@ def put_networth_cell(body: NwCellIn, user_id: str = Depends(current_user_id)):
         raise HTTPException(status_code=404, detail=str(exc))
     data = db.get_networth_data(user_id, body.year)
     return compute_networth_summary(
-        data["cash"], data["investments"], data["assets"],
+        data["cash"], data["investments"], data["assets"], data["liabilities"],
         body.year, body.month_idx,
     )
 
@@ -113,3 +113,25 @@ def delete_asset_category(category_id: str, user_id: str = Depends(current_user_
 @router.delete("/assets/items/{item_id}", status_code=204)
 def delete_asset_item(item_id: str, user_id: str = Depends(current_user_id)):
     db.delete_asset_item(user_id, item_id)
+
+
+# ── Liability CRUD ────────────────────────────────────────────────────────────
+
+@router.post("/liabilities/categories", status_code=201)
+def post_liability_category(body: NameIn, user_id: str = Depends(current_user_id)):
+    return db.add_liability_category(user_id, body.name)
+
+
+@router.post("/liabilities/categories/{category_id}/items", status_code=201)
+def post_liability_item(category_id: str, body: NameIn, user_id: str = Depends(current_user_id)):
+    return db.add_liability_item(user_id, category_id, body.name)
+
+
+@router.delete("/liabilities/categories/{category_id}", status_code=204)
+def delete_liability_category(category_id: str, user_id: str = Depends(current_user_id)):
+    db.delete_liability_category(user_id, category_id)
+
+
+@router.delete("/liabilities/items/{item_id}", status_code=204)
+def delete_liability_item(item_id: str, user_id: str = Depends(current_user_id)):
+    db.delete_liability_item(user_id, item_id)
