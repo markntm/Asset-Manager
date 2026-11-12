@@ -22,7 +22,7 @@ def _tree(s, user_id, year, Root, Child, child_fk, Entry, entry_fk, key, order, 
     parents = roots(s, Root, user_id)
     kids = s.scalars(select(Child)
                      .where(getattr(Child, child_fk).in_([p.id for p in parents]))
-                     .order_by(order)).all()
+                     .order_by(Child.sort_order, order)).all()
     vals = cells(s, Entry, entry_fk, [k.id for k in kids], year)
     by_parent = defaultdict(list)
     for k in kids:

@@ -17,7 +17,7 @@ def get_cashflow_data(user_id: str, year: int) -> dict:
         exp_ids = [c.id for c in exp]
         subs = s.scalars(select(ExpenseSubcategory)
                          .where(ExpenseSubcategory.category_id.in_(exp_ids))
-                         .order_by(ExpenseSubcategory.name)).all()
+                         .order_by(ExpenseSubcategory.sort_order, ExpenseSubcategory.name)).all()
         sub_vals = cells(s, ExpenseEntry, "subcategory_id", [sc.id for sc in subs], year)
         bud_vals = cells(s, BudgetEntry, "category_id", exp_ids, year)
         targets = dict(s.execute(select(BudgetTarget.category_id, BudgetTarget.monthly_budget)

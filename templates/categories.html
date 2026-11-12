@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>FinTrack — Categories</title>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+        [hidden] { display:none !important; }
+        :root { --bg:#0f1117; --surface:#1a1d27; --surface-2:#222536; --border:#2e3249; --accent:#6c63ff;
+            --red:#f87171; --text:#e2e8f0; --muted:#8892a4; --radius:12px; }
+        body { font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+        header { background:var(--surface); border-bottom:1px solid var(--border); padding:0 32px; height:64px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+        .logo { font-size:1.2rem; font-weight:700; } .logo span { color:var(--accent); }
+        .header-date { font-size:0.8rem; color:var(--muted); background:var(--surface-2); border:1px solid var(--border); padding:5px 14px; border-radius:20px; }
+        .main-nav { background:var(--surface); border-bottom:1px solid var(--border); padding:0 32px; display:flex; align-items:stretch; position:sticky; top:64px; z-index:99; height:49px; }
+        .nav-tab { padding:0 20px; height:49px; color:var(--muted); font-size:0.875rem; font-weight:500; position:relative; text-decoration:none; display:inline-flex; align-items:center; white-space:nowrap; }
+        .nav-tab:hover { color:var(--text); } .nav-tab.active { color:var(--accent); }
+        .nav-tab.active::after { content:''; position:absolute; bottom:0; left:0; right:0; height:2px; background:var(--accent); border-radius:2px 2px 0 0; }
+        main { padding:24px 32px; max-width:900px; margin:0 auto; }
+
+        .tabs { display:flex; gap:6px; margin-bottom:18px; }
+        .tab { padding:7px 18px; border-radius:20px; border:1px solid var(--border); background:none; color:var(--muted); font-size:.85rem; font-weight:600; font-family:inherit; cursor:pointer; }
+        .tab.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+        .err { color:var(--red); font-size:.82rem; min-height:1.2em; margin-bottom:8px; }
+        .hint { color:var(--muted); font-size:.75rem; margin-top:6px; }
+
+        .dir { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); margin-bottom:14px; overflow:hidden; }
+        .dir-head { display:flex; align-items:center; gap:10px; padding:12px 14px; cursor:pointer; user-select:none; }
+        .dir-head .t { flex:1; font-size:.9rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--accent); }
+        .kids { list-style:none; min-height:8px; }
+        .kids .kids { margin-left:28px; border-left:1px solid var(--border); }
+        .kids:empty::before { content:'Empty'; display:block; padding:10px 16px; color:var(--muted); font-size:.8rem; font-style:italic; }
+        .row { display:flex; align-items:center; gap:6px; padding:6px 12px; border-top:1px solid var(--border); font-size:.88rem; background:var(--surface); }
+        .row .t { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .folder > .row .t { font-weight:600; cursor:pointer; }
+        .grip { width:28px; text-align:center; color:var(--muted); cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+        .chev { width:18px; flex-shrink:0; text-align:center; color:var(--muted); font-size:.6rem; cursor:pointer; transition:transform .2s; }
+        .node:not(.open) > * > .chev { transform:rotate(-90deg); }
+        .node:not(.open) > .kids { display:none; }
+        .dragging .node > .kids { display:block !important; }   /* expand everything while dragging so any folder is a drop target */
+        .ib { background:none; border:none; color:var(--muted); cursor:pointer; font-size:.95rem; padding:6px 8px; border-radius:6px; }
+        .ib:hover { color:var(--accent); } .ib.del:hover { color:var(--red); }
+        .sortable-ghost { opacity:.35; }
+        .sortable-fallback { background:var(--surface-2); border:1px solid var(--accent); border-radius:8px; list-style:none; }
+        @media (pointer:coarse) { .ib { padding:10px; } .grip { width:40px; padding:8px 0; } }
+        @media (max-width:700px) { header, .main-nav { padding-left:14px; padding-right:14px; } main { padding:16px 14px; } }
+
+        .overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); backdrop-filter:blur(3px); z-index:200; align-items:center; justify-content:center; }
+        .overlay.open { display:flex; }
+        .modal { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:26px; width:420px; max-width:90vw; box-shadow:0 20px 60px rgba(0,0,0,0.5); }
+        .modal h3 { font-size:1rem; font-weight:700; margin-bottom:6px; overflow-wrap:anywhere; }
+        .modal-sub { font-size:.8rem; color:var(--muted); margin-bottom:14px; } .modal-sub:empty { display:none; }
+        #mInput { width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text); padding:9px 13px; border-radius:8px; font-size:.875rem; font-family:inherit; outline:none; }
+        #mInput:focus { border-color:var(--accent); }
+        .modal-btns { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+        .btn-cancel { padding:8px 16px; background:none; border:1px solid var(--border); color:var(--muted); border-radius:8px; font-size:.875rem; cursor:pointer; font-family:inherit; }
+        .btn-ok { padding:8px 18px; background:var(--accent); border:none; color:#fff; border-radius:8px; font-size:.875rem; font-weight:600; cursor:pointer; font-family:inherit; }
+        .btn-ok.danger { background:var(--red); }
+    </style>
+    <link rel="stylesheet" href="/responsive.css"/>
+    <link rel="manifest" href="/static/manifest.json"/>
+    <meta name="theme-color" content="#0f1117"/>
+    <meta name="mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-title" content="FinTrack"/>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black"/>
+    <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png"/>
+    <script src="/static/pwa.js" defer></script>
+</head>
+<body>
+<header>
+    <div class="logo">Fin<span>Track</span></div>
+    <div style="display:flex; gap:10px; align-items:center">
+        <div class="header-date" id="hDate"></div>
+        <a class="header-date" href="/logout" style="text-decoration:none">Sign out</a>
+    </div>
+</header>
+<nav class="main-nav">
+    <a class="nav-tab"        href="/">📊 Dashboard</a>
+    <a class="nav-tab"        href="/cashflow">💸 Cash Flow</a>
+    <a class="nav-tab"        href="/networth">🏦 Net Worth</a>
+    <a class="nav-tab"        href="/budget">📋 Budgeting</a>
+    <a class="nav-tab active" href="/categories">🗂️ Categories</a>
+    <a class="nav-tab"        href="/transactions">🧾 Transactions</a>
+    <a class="nav-tab"        href="/statements">📥 Import</a>
+    <a class="nav-tab"        href="/forecast">⛅ Forecasting</a>
+    <a class="nav-tab"        href="/chatbot">🤖 Chatbot</a>
+</nav>
+<script>document.querySelector('.nav-tab.active')?.scrollIntoView({inline:'center', block:'nearest'})</script>
+
+<main>
+    <div class="tabs">
+        <button class="tab active" data-tab="cashflow">💸 Cash Flow</button>
+        <button class="tab" data-tab="networth">🏦 Net Worth</button>
+    </div>
+    <div class="err" id="err"></div>
+    <div id="app"></div>
+    <p class="hint">Drag ⠿ to reorder, or drop an item into another folder to move it with all its data. This order is used on the Cash Flow and Net Worth pages.</p>
+</main>
+
+<div class="overlay" id="overlay">
+    <div class="modal">
+        <h3 id="mTitle"></h3>
+        <p class="modal-sub" id="mSub"></p>
+        <input type="text" id="mInput" maxlength="200"/>
+        <div class="modal-btns">
+            <button class="btn-cancel" id="mCancel">Cancel</button>
+            <button class="btn-ok" id="mOk"></button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const $   = id => document.getElementById(id);
+    const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+    // kind → which tab it lives on, its title, and what its rows / children are called (child:null = no folders)
+    const CFG = {
+        income:     { tab:'cashflow', title:'Income',      root:'income source',      child:null },
+        expense:    { tab:'cashflow', title:'Expenses',    root:'expense category',   child:'subcategory' },
+        cash:       { tab:'networth', title:'Cash',        root:'institution',        child:'account' },
+        investment: { tab:'networth', title:'Investments', root:'brokerage',          child:'ticker' },
+        asset:      { tab:'networth', title:'Assets',      root:'asset category',     child:'asset' },
+        liability:  { tab:'networth', title:'Liabilities', root:'liability category', child:'liability' },
+    };
+    const OPEN = new Set(Object.keys(CFG));   // expanded nodes: directories start open, folders closed
+    let TAB = 'cashflow';
+
+    // ── API ──────────────────────────────────────────────────────────
+    async function api(path, method = 'GET', body) {
+        try {
+            const r = await fetch(path, { method, headers: {'Content-Type':'application/json'}, body: body && JSON.stringify(body) });
+            if (r.status === 401) { location.href = '/login'; return null; }
+            return r.ok ? (r.status === 204 ? true : r.json()) : null;
+        } catch { return null; }
+    }
+    const fail = () => { $('err').textContent = 'Couldn’t save that change — the list was reloaded.'; return refresh(); };
+    async function run(path, method, body) {
+        if (await api(path, method, body)) { $('err').textContent = ''; refresh(); } else fail();
+    }
+
+    // ── Render ───────────────────────────────────────────────────────
+    const node = (n, folder) => `<li class="node ${folder ? 'folder' : 'leaf'}${OPEN.has(n.id) ? ' open' : ''}" data-id="${n.id}">
+<div class="row"><span class="grip">⠿</span>${folder ? '<span class="chev" data-act="toggle">▼</span>' : '<span class="chev"></span>'}<span class="t"${folder ? ' data-act="toggle"' : ''}>${esc(n.name)}</span>${folder ? '<button class="ib" data-act="add" title="Add">＋</button>' : ''}<button class="ib" data-act="edit" title="Rename">✎</button><button class="ib del" data-act="del" title="Delete">🗑</button></div>${folder ? `<ul class="kids" data-parent="${n.id}">${n.children.map(k => node(k, false)).join('')}</ul>` : ''}</li>`;
+
+    const dir = (kind, items) => { const c = CFG[kind]; return `<section class="dir node${OPEN.has(kind) ? ' open' : ''}" data-id="${kind}" data-kind="${kind}"${c.tab === TAB ? '' : ' hidden'}><div class="dir-head" data-act="toggle"><span class="chev">▼</span><span class="t">${c.title}</span><button class="ib" data-act="add" title="Add ${c.root}">＋</button></div><ul class="kids" data-parent="">${items.map(n => node(n, !!c.child)).join('')}</ul></section>`; };
+
+    async function refresh() {
+        const d = await api('/api/categories');
+        if (!d) { $('err').textContent = 'Couldn’t load categories.'; return; }
+        $('app').innerHTML = Object.keys(CFG).map(k => dir(k, d[k])).join('');
+        document.querySelectorAll('.kids').forEach(ul => new Sortable(ul, {
+            group: ul.closest('[data-kind]').dataset.kind + (ul.dataset.parent ? '-child' : '-root'),  // children only move between folders of the same section
+            handle: '.grip', draggable: '.node', animation: 150,
+            forceFallback: true, fallbackOnBody: true, emptyInsertThreshold: 24,   // pointer-based drag: works on touch / installed PWA
+            onStart: () => document.body.classList.add('dragging'),
+            onEnd: async e => {
+                document.body.classList.remove('dragging');
+                if (e.from === e.to && e.oldIndex === e.newIndex) return;
+                const to = e.to, kind = to.closest('[data-kind]').dataset.kind;
+                if (to.dataset.parent) OPEN.add(to.dataset.parent);
+                const ids = [...to.querySelectorAll(':scope > .node')].map(li => li.dataset.id);
+                if (await api(`/api/categories/${kind}/arrange`, 'POST', { parent_id: to.dataset.parent || null, ids })) $('err').textContent = '';
+                else fail();
+            },
+        }));
+    }
+
+    // ── Actions (add / rename / delete / expand) ─────────────────────
+    $('app').addEventListener('click', async e => {
+        const b = e.target.closest('[data-act]');
+        if (!b) return;
+        const el = b.closest('.node'), sec = el.closest('[data-kind]'), kind = sec.dataset.kind, c = CFG[kind];
+        const isDir = el === sec, id = el.dataset.id, act = b.dataset.act;
+
+        if (act === 'toggle') {
+            el.classList.toggle('open');
+            OPEN[el.classList.contains('open') ? 'add' : 'delete'](id);
+        } else if (act === 'add') {
+            const name = await ask({ title: `Add ${isDir ? c.root : c.child}`, value: '', ok: 'Add' });
+            if (!name) return;
+            if (!isDir) OPEN.add(id);
+            run(`/api/categories/${kind}`, 'POST', { name, parent_id: isDir ? null : id });
+        } else if (act === 'edit') {
+            const old = el.querySelector('.t').textContent, name = await ask({ title: 'Rename', value: old });
+            if (name && name !== old) run(`/api/categories/${kind}/${id}`, 'PUT', { name });
+        } else {
+            const old = el.querySelector('.t').textContent, folder = el.classList.contains('folder');
+            if (await ask({ title: `Delete “${old}”?`, ok: 'Delete', danger: true,
+                sub: `This permanently deletes it${folder ? ', everything inside it,' : ''} and all recorded amounts. This can’t be undone.` }))
+                run(`/api/categories/${kind}/${id}`, 'DELETE');
+        }
+    });
+
+    // ── Modal: value === null → confirm only; otherwise text prompt ──
+    function ask({ title, sub = '', value = null, ok = 'Save', danger = false }) {
+        return new Promise(res => {
+            const inp = $('mInput');
+            $('mTitle').textContent = title; $('mSub').textContent = sub;
+            inp.hidden = value === null; inp.value = value ?? '';
+            $('mOk').textContent = ok; $('mOk').classList.toggle('danger', danger);
+            const done = v => { $('overlay').classList.remove('open'); res(v); };
+            $('mOk').onclick     = () => done(value === null ? true : inp.value.trim() || null);
+            $('mCancel').onclick = () => done(null);
+            $('overlay').onclick = e => e.target === e.currentTarget && done(null);
+            inp.onkeydown        = e => e.key === 'Enter' && $('mOk').onclick();
+            $('overlay').classList.add('open');
+            if (value !== null) setTimeout(() => inp.focus(), 40);
+        });
+    }
+    document.addEventListener('keydown', e => e.key === 'Escape' && $('overlay').classList.contains('open') && $('mCancel').click());
+
+    // ── Tabs / init ──────────────────────────────────────────────────
+    document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+        TAB = t.dataset.tab;
+        document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
+        document.querySelectorAll('.dir').forEach(s => s.hidden = CFG[s.dataset.kind].tab !== TAB);
+    }));
+    $('hDate').textContent = new Date().toLocaleDateString('en-US', { month:'long', year:'numeric' });
+    refresh();
+</script>
+</body>
+</html>
