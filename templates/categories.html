@@ -204,8 +204,8 @@
             const done = v => { $('overlay').classList.remove('open'); res(v); };
             $('mOk').onclick     = () => done(value === null ? true : inp.value.trim() || null);
             $('mCancel').onclick = () => done(null);
-            $('overlay').onclick = e => e.target === e.currentTarget && done(null);
-            inp.onkeydown        = e => e.key === 'Enter' && $('mOk').onclick();
+            $('overlay').onclick = e => { if (e.target === e.currentTarget) done(null); };
+            inp.onkeydown        = e => { if (e.key === 'Enter') $('mOk').onclick(); };
             $('overlay').classList.add('open');
             if (value !== null) setTimeout(() => inp.focus(), 40);
         });
