@@ -143,7 +143,7 @@
 
     // ── Render ───────────────────────────────────────────────────────
     const node = (n, folder) => `<li class="node ${folder ? 'folder' : 'leaf'}${OPEN.has(n.id) ? ' open' : ''}" data-id="${n.id}">
-<div class="row"><span class="grip">⠿</span>${folder ? '<span class="chev" data-act="toggle">▼</span>' : '<span class="chev"></span>'}<span class="t"${folder ? ' data-act="toggle"' : ''}>${esc(n.name)}</span>${folder ? '<button class="ib" data-act="add" title="Add">＋</button>' : ''}<button class="ib" data-act="edit" title="Rename">✎</button><button class="ib del" data-act="del" title="Delete">🗑</button></div>${folder ? `<ul class="kids" data-parent="${n.id}">${n.children.map(k => node(k, false)).join('')}</ul>` : ''}</li>`;
+<div class="row"><span class="grip">⠿</span>${folder ? '<span class="chev" data-act="toggle">▼</span>' : '<span class="chev"></span>'}<span class="t"${folder ? ' data-act="toggle"' : ''}>${esc(n.name)}</span>${folder ? '<button class="ib" data-act="add" title="Add">＋</button>' : ''}<button class="ib" data-act="edit" title="Rename">✎</button><button class="ib del" data-act="del" title="Delete">✕</button></div>${folder ? `<ul class="kids" data-parent="${n.id}">${n.children.map(k => node(k, false)).join('')}</ul>` : ''}</li>`;
 
     const dir = (kind, items) => { const c = CFG[kind]; return `<section class="dir node${OPEN.has(kind) ? ' open' : ''}" data-id="${kind}" data-kind="${kind}"${c.tab === TAB ? '' : ' hidden'}><div class="dir-head" data-act="toggle"><span class="chev">▼</span><span class="t">${c.title}</span><button class="ib" data-act="add" title="Add ${c.root}">＋</button></div><ul class="kids" data-parent="">${items.map(n => node(n, !!c.child)).join('')}</ul></section>`; };
 

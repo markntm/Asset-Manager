@@ -284,14 +284,6 @@
             white-space: nowrap; min-width: 110px;
             text-align: right; flex-shrink: 0;
         }
-        .btn-del {
-            background: none; border: none; color: transparent;
-            cursor: pointer; font-size: 0.8rem; padding: 4px 6px;
-            border-radius: 4px; transition: color 0.15s; flex-shrink: 0;
-        }
-        .inst-header:hover .btn-del,
-        .leaf-row:hover   .btn-del { color: var(--muted); }
-        .btn-del:hover { color: var(--red) !important; }
 
         .add-row { padding: 10px 20px; }
         .add-row.indented { padding-left: 40px; }
@@ -657,20 +649,12 @@
     );
     const apiAddCashInst  = n       => apiFetch('/api/networth/cash/institutions',          { method:'POST', body:JSON.stringify({name:n}) });
     const apiAddCashAcc   = (id, n) => apiFetch(`/api/networth/cash/institutions/${id}/accounts`, { method:'POST', body:JSON.stringify({name:n}) });
-    const apiDelCashInst  = id      => apiFetch(`/api/networth/cash/institutions/${id}`,    { method:'DELETE' });
-    const apiDelCashAcc   = id      => apiFetch(`/api/networth/cash/accounts/${id}`,        { method:'DELETE' });
     const apiAddInvBrk    = n       => apiFetch('/api/networth/investments/brokerages',     { method:'POST', body:JSON.stringify({name:n}) });
     const apiAddInvHold   = (id,t,q)=> apiFetch(`/api/networth/investments/brokerages/${id}/holdings`, { method:'POST', body:JSON.stringify({ticker:t, quantity:q}) });
-    const apiDelInvBrk    = id      => apiFetch(`/api/networth/investments/brokerages/${id}`, { method:'DELETE' });
-    const apiDelInvHold   = id      => apiFetch(`/api/networth/investments/holdings/${id}`, { method:'DELETE' });
     const apiAddAstCat    = n       => apiFetch('/api/networth/assets/categories',          { method:'POST', body:JSON.stringify({name:n}) });
     const apiAddAstItem   = (id, n) => apiFetch(`/api/networth/assets/categories/${id}/items`, { method:'POST', body:JSON.stringify({name:n}) });
-    const apiDelAstCat    = id      => apiFetch(`/api/networth/assets/categories/${id}`,   { method:'DELETE' });
-    const apiDelAstItem   = id      => apiFetch(`/api/networth/assets/items/${id}`,        { method:'DELETE' });
     const apiAddLiabCat   = n       => apiFetch('/api/networth/liabilities/categories',          { method:'POST', body:JSON.stringify({name:n}) });
     const apiAddLiabItem  = (id, n) => apiFetch(`/api/networth/liabilities/categories/${id}/items`, { method:'POST', body:JSON.stringify({name:n}) });
-    const apiDelLiabCat   = id      => apiFetch(`/api/networth/liabilities/categories/${id}`,   { method:'DELETE' });
-    const apiDelLiabItem  = id      => apiFetch(`/api/networth/liabilities/items/${id}`,        { method:'DELETE' });
 
     // ════════════════════════════════════════════════════════════════
     //  INPUT HANDLERS
@@ -913,7 +897,6 @@
             oninput="onCashInput('${instId}','${acc.id}',${mi},this.value)"
             onblur="onCashBlur('${acc.id}',${STATE.year},${mi},this.value)"/>
         <span class="row-delta" id="dlt-cash-acc-${acc.id}">${_fmtDeltaVal(null)}</span>
-        <button class="btn-del" onclick="doDelCashAcc('${instId}','${acc.id}')">✕</button>
     </div>`;
     }
 
@@ -935,7 +918,6 @@
                     <div class="cat-stat-val" id="cash-inst-dlt-${inst.id}">${_fmtDeltaVal(null)}</div>
                 </div>
             </div>
-            <button class="btn-del" onclick="event.stopPropagation();doDelCashInst('${inst.id}')">✕</button>
         </div>
         <div class="inst-body" id="cash-inst-${inst.id}-body">
             ${rows || '<div class="empty-msg" style="padding-left:44px">No accounts yet.</div>'}
@@ -991,7 +973,6 @@
             oninput="onInvInput('${brkId}','${hold.id}',${mi},this.value)"
             onblur="onInvBlur('${hold.id}',${STATE.year},${mi},this.value)"/>
         <span class="row-delta" id="dlt-inv-hold-${hold.id}">${_fmtDeltaVal(null)}</span>
-        <button class="btn-del" onclick="doDelInvHold('${brkId}','${hold.id}')">✕</button>
     </div>`;
     }
 
@@ -1013,7 +994,6 @@
                     <div class="cat-stat-val" id="inv-brk-dlt-${brk.id}">${_fmtDeltaVal(null)}</div>
                 </div>
             </div>
-            <button class="btn-del" onclick="event.stopPropagation();doDelInvBrk('${brk.id}')">✕</button>
         </div>
         <div class="inst-body" id="inv-brk-${brk.id}-body">
             ${rows || '<div class="empty-msg" style="padding-left:44px">No holdings yet.</div>'}
@@ -1061,7 +1041,6 @@
             oninput="onAstInput('${catId}','${item.id}',${mi},this.value)"
             onblur="onAstBlur('${item.id}',${STATE.year},${mi},this.value)"/>
         <span class="row-delta" id="dlt-ast-item-${item.id}">${_fmtDeltaVal(null)}</span>
-        <button class="btn-del" onclick="doDelAstItem('${catId}','${item.id}')">✕</button>
     </div>`;
     }
 
@@ -1083,7 +1062,6 @@
                     <div class="cat-stat-val" id="ast-cat-dlt-${cat.id}">${_fmtDeltaVal(null)}</div>
                 </div>
             </div>
-            <button class="btn-del" onclick="event.stopPropagation();doDelAstCat('${cat.id}')">✕</button>
         </div>
         <div class="inst-body" id="ast-cat-${cat.id}-body">
             ${rows || '<div class="empty-msg" style="padding-left:44px">No assets yet.</div>'}
@@ -1131,7 +1109,6 @@
             oninput="onLiabInput('${catId}','${item.id}',${mi},this.value)"
             onblur="onLiabBlur('${item.id}',${STATE.year},${mi},this.value)"/>
         <span class="row-delta" id="dlt-liab-item-${item.id}">${_fmtDeltaVal(null)}</span>
-        <button class="btn-del" onclick="doDelLiabItem('${catId}','${item.id}')">✕</button>
     </div>`;
     }
 
@@ -1153,7 +1130,6 @@
                     <div class="cat-stat-val" id="liab-cat-dlt-${cat.id}">${_fmtDeltaVal(null)}</div>
                 </div>
             </div>
-            <button class="btn-del" onclick="event.stopPropagation();doDelLiabCat('${cat.id}')">✕</button>
         </div>
         <div class="inst-body" id="liab-cat-${cat.id}-body">
             ${rows || '<div class="empty-msg" style="padding-left:44px">No liabilities yet.</div>'}
@@ -1363,54 +1339,6 @@
         const open = body.style.display !== 'none';
         body.style.display = open ? 'none' : '';
         if (chv) chv.style.transform = open ? 'rotate(-90deg)' : '';
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    //  DELETE HANDLERS
-    // ════════════════════════════════════════════════════════════════
-    async function doDelCashInst(id) {
-        await apiDelCashInst(id);
-        STATE.cash = STATE.cash.filter(i => i.id !== id);
-        STATE.activeView !== 'year' ? renderMonthView(STATE.activeView) : renderYearView();
-    }
-    async function doDelCashAcc(instId, accId) {
-        await apiDelCashAcc(accId);
-        const inst = STATE.cash.find(i => i.id === instId);
-        if (inst) inst.accounts = inst.accounts.filter(a => a.id !== accId);
-        if (STATE.activeView !== 'year') renderMonthView(STATE.activeView);
-    }
-    async function doDelInvBrk(id) {
-        await apiDelInvBrk(id);
-        STATE.investments = STATE.investments.filter(b => b.id !== id);
-        STATE.activeView !== 'year' ? renderMonthView(STATE.activeView) : renderYearView();
-    }
-    async function doDelInvHold(brkId, holdId) {
-        await apiDelInvHold(holdId);
-        const brk = STATE.investments.find(b => b.id === brkId);
-        if (brk) brk.holdings = brk.holdings.filter(h => h.id !== holdId);
-        if (STATE.activeView !== 'year') renderMonthView(STATE.activeView);
-    }
-    async function doDelAstCat(id) {
-        await apiDelAstCat(id);
-        STATE.assets = STATE.assets.filter(c => c.id !== id);
-        STATE.activeView !== 'year' ? renderMonthView(STATE.activeView) : renderYearView();
-    }
-    async function doDelAstItem(catId, itemId) {
-        await apiDelAstItem(itemId);
-        const cat = STATE.assets.find(c => c.id === catId);
-        if (cat) cat.items = cat.items.filter(i => i.id !== itemId);
-        if (STATE.activeView !== 'year') renderMonthView(STATE.activeView);
-    }
-    async function doDelLiabCat(id) {
-        await apiDelLiabCat(id);
-        STATE.liabilities = STATE.liabilities.filter(c => c.id !== id);
-        STATE.activeView !== 'year' ? renderMonthView(STATE.activeView) : renderYearView();
-    }
-    async function doDelLiabItem(catId, itemId) {
-        await apiDelLiabItem(itemId);
-        const cat = STATE.liabilities.find(c => c.id === catId);
-        if (cat) cat.items = cat.items.filter(i => i.id !== itemId);
-        if (STATE.activeView !== 'year') renderMonthView(STATE.activeView);
     }
 
     // ════════════════════════════════════════════════════════════════
