@@ -39,7 +39,7 @@ def get_transactions_page(user_id: str) -> dict:
         exp = roots(s, ExpenseCategory, user_id)
         subs = s.scalars(select(ExpenseSubcategory)
                          .where(ExpenseSubcategory.category_id.in_([c.id for c in exp]))
-                         .order_by(ExpenseSubcategory.name)).all()
+                         .order_by(ExpenseSubcategory.sort_order, ExpenseSubcategory.name)).all()
         rows = [_row(t) for t in txns]
         flags = flag_transactions(rows)
         for r in rows:

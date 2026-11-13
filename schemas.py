@@ -113,3 +113,17 @@ class StmtKeyIn(BaseModel):
 class StmtCheckIn(BaseModel):
     bank_id: Optional[str] = None
     rows:    list[StmtKeyIn] = Field(max_length=5000)
+
+
+# ── Categories page ───────────────────────────────────────────────────────────
+
+class CategoryIn(BaseModel):
+    """Create / rename a category. parent_id is only used on create."""
+    name:      str = Field(min_length=1, max_length=200)
+    parent_id: Optional[str] = None
+
+
+class ArrangeIn(BaseModel):
+    """Final order of one list: parent_id=None → top-level rows, else that parent's children."""
+    parent_id: Optional[str] = None
+    ids:       list[str] = Field(max_length=500)

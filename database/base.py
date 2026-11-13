@@ -3,7 +3,7 @@
 import os
 from collections import defaultdict
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, delete, select
+from sqlalchemy import create_engine, delete, func, select, insert
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
@@ -27,8 +27,9 @@ SessionLocal = sessionmaker(engine, expire_on_commit=False)
 # ── Shared query helpers ─────────────────────────────────────────────────────
 
 def roots(s, model, user_id):
-    """A user's top-level rows, oldest first."""
-    return s.scalars(select(model).where(model.user_id == user_id).order_by(model.created_at)).all()
+    """A user's top-level rows, in their chosen order."""
+    return s.scalars(select(model).where(model.user_id == user_id)
+                     .order_by(model.sort_order, model.created_at)).all()
 
 
 def require_root(s, model, row_id, user_id):
@@ -46,7 +47,8 @@ def require_child(s, child, fk_name, parent, row_id, user_id):
 
 def add_root(model, user_id, name) -> dict:
     with SessionLocal.begin() as s:
-        row = model(user_id=user_id, name=name)
+        pos = s.scalar(select(func.coalesce(func.max(model.sort_order), 0)).where(model.user_id == user_id)) + 1
+        row = model(user_id=user_id, name=name, sort_order=pos)
         s.add(row)
         s.flush()
         return {"id": row.id, "name": name}
@@ -60,7 +62,9 @@ def delete_root(model, user_id, row_id) -> None:
 def add_child(user_id, child, fk_name, parent, parent_id, **fields) -> dict:
     with SessionLocal.begin() as s:
         require_root(s, parent, parent_id, user_id)
-        row = child(**{fk_name: parent_id}, **fields)
+        pos = s.scalar(select(func.coalesce(func.max(child.sort_order), 0))
+                       .where(getattr(child, fk_name) == parent_id)) + 1
+        row = child(**{fk_name: parent_id}, sort_order=pos, **fields)
         s.add(row)
         s.flush()
         return {"id": row.id, **fields}

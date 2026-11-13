@@ -12,7 +12,7 @@ def get_budget_categories(user_id: str) -> list[dict]:
             select(ExpenseCategory.id, ExpenseCategory.name, BudgetTarget.monthly_budget)
             .outerjoin(BudgetTarget, BudgetTarget.category_id == ExpenseCategory.id)
             .where(ExpenseCategory.user_id == user_id)
-            .order_by(ExpenseCategory.created_at)
+            .order_by(ExpenseCategory.sort_order, ExpenseCategory.created_at)
         ).all()
         return [{"id": r.id, "name": r.name,
                  "monthly_budget": float(r.monthly_budget) if r.monthly_budget is not None else None}

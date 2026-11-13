@@ -273,22 +273,11 @@
         .amount-input::-webkit-outer-spin-button { -webkit-appearance: none; }
         .amount-input:focus { border-color: var(--accent); }
         .amount-input:hover:not(:focus) { border-color: color-mix(in srgb, var(--border) 60%, var(--accent) 40%); }
-
         .row-delta {
             font-size: 0.78rem; font-weight: 600;
             white-space: nowrap; min-width: 120px;
             text-align: right; flex-shrink: 0;
         }
-        .btn-del {
-            background: none; border: none; color: transparent;
-            cursor: pointer; font-size: 0.8rem; padding: 4px 6px;
-            border-radius: 4px; transition: color 0.15s; flex-shrink: 0;
-        }
-        .inc-cat-row:hover    .btn-del,
-        .exp-cat-header:hover .btn-del,
-        .exp-subcat-row:hover .btn-del { color: var(--muted); }
-        .btn-del:hover { color: var(--red) !important; }
-
         .add-row { padding: 10px 20px; }
         .btn-add-row {
             background: none; border: 1px dashed var(--border);
@@ -419,7 +408,8 @@
     <a class="nav-tab"        href="/">📊 Dashboard</a>
     <a class="nav-tab active" href="/cashflow">💸 Cash Flow</a>
     <a class="nav-tab"        href="/networth">🏦 Net Worth</a>
-    <a class="nav-tab"        href="/budget">📋 Budgeting &amp; Planning</a>
+    <a class="nav-tab"        href="/budget">📋 Budgeting</a>
+    <a class="nav-tab"        href="/categories">🗂️ Categories</a>
     <a class="nav-tab"        href="/transactions">🧾 Transactions</a>
     <a class="nav-tab"        href="/statements">📥 Import</a>
     <a class="nav-tab"        href="/forecast">⛅ Forecasting</a>
@@ -656,11 +646,8 @@
         { method:'PUT', body: JSON.stringify({year:yr, month_idx:mi, value: v===''?null:+v}) });
 
     const apiAddIncomeCat     = n        => apiFetch('/api/cashflow/income/categories',                         {method:'POST',   body:JSON.stringify({name:n})});
-    const apiDelIncomeCat     = id       => apiFetch(`/api/cashflow/income/categories/${id}`,                   {method:'DELETE'});
     const apiAddExpenseCat    = n        => apiFetch('/api/cashflow/expense/categories',                        {method:'POST',   body:JSON.stringify({name:n})});
-    const apiDelExpenseCat    = id       => apiFetch(`/api/cashflow/expense/categories/${id}`,                  {method:'DELETE'});
     const apiAddExpenseSubcat = (cid, n) => apiFetch(`/api/cashflow/expense/categories/${cid}/subcategories`,   {method:'POST',   body:JSON.stringify({name:n})});
-    const apiDelExpenseSubcat = id       => apiFetch(`/api/cashflow/expense/subcategories/${id}`,               {method:'DELETE'});
 
     // ════════════════════════════════════════════════════════════════
     //  INPUT HANDLERS
@@ -821,7 +808,6 @@
                 oninput="onIncInput('${cat.id}',${mi},this.value)"
                 onblur="onIncBlur('${cat.id}',${mi},this.value)"/>
             <span class="row-delta" id="dlt-inc-${cat.id}">${makeDelta(v||null, pv, true)}</span>
-            <button class="btn-del" onclick="doDelIncomeCat('${cat.id}')" title="Remove">✕</button>
         </div>`;
         }).join('');
 
@@ -866,8 +852,6 @@
                 oninput="onExpInput('${sc.id}','${cat.id}',${mi},this.value)"
                 onblur="onExpBlur('${sc.id}',${mi},this.value)"/>
             <span class="row-delta" id="dlt-exp-${sc.id}">${makeDelta(sv||null, sp, false)}</span>
-            <button class="btn-del"
-                onclick="doDelExpSubcat('${cat.id}','${sc.id}')" title="Remove">✕</button>
         </div>`;
         }).join('');
 
@@ -893,8 +877,6 @@
                     <div class="cat-stat-val" id="expcat-dlt-${cat.id}">${makeDelta(cv, cp, false)}</div>
                 </div>
             </div>
-            <button class="btn-del"
-                onclick="event.stopPropagation();doDelExpCat('${cat.id}')" title="Remove">✕</button>
         </div>
         <div class="exp-cat-body" id="expcat-body-${cat.id}">
             ${subRows || '<div class="empty-msg" style="padding-left:44px">No subcategories yet.</div>'}
@@ -1116,28 +1098,6 @@
         const open = body.style.display !== 'none';
         body.style.display   = open ? 'none' : '';
         if (chv) chv.style.transform = open ? 'rotate(-90deg)' : '';
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    //  DELETE HANDLERS
-    // ════════════════════════════════════════════════════════════════
-    async function doDelIncomeCat(id) {
-        await apiDelIncomeCat(id);
-        STATE.income = STATE.income.filter(c => c.id !== id);
-        STATE.activeView === 'year' ? renderYearView() : renderMonthView(STATE.activeView);
-    }
-
-    async function doDelExpCat(id) {
-        await apiDelExpenseCat(id);
-        STATE.expenses = STATE.expenses.filter(c => c.id !== id);
-        STATE.activeView === 'year' ? renderYearView() : renderMonthView(STATE.activeView);
-    }
-
-    async function doDelExpSubcat(catId, scId) {
-        await apiDelExpenseSubcat(scId);
-        const cat = STATE.expenses.find(c => c.id === catId);
-        if (cat) cat.subcategories = cat.subcategories.filter(s => s.id !== scId);
-        if (STATE.activeView !== 'year') renderMonthView(STATE.activeView);
     }
 
     // ════════════════════════════════════════════════════════════════

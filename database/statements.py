@@ -20,11 +20,11 @@ def get_lookups(user_id: str) -> dict:
         banks = roots(s, CashInstitution, user_id)
         accts = s.scalars(select(CashAccount)
                           .where(CashAccount.institution_id.in_([b.id for b in banks]))
-                          .order_by(CashAccount.name)).all()
+                          .order_by(CashAccount.sort_order, CashAccount.name)).all()
         exp = roots(s, ExpenseCategory, user_id)
         subs = s.scalars(select(ExpenseSubcategory)
                          .where(ExpenseSubcategory.category_id.in_([c.id for c in exp]))
-                         .order_by(ExpenseSubcategory.name)).all()
+                         .order_by(ExpenseSubcategory.sort_order, ExpenseSubcategory.name)).all()
         return {
             "banks": [{"id": b.id, "name": b.name,
                        "accounts": [{"id": a.id, "name": a.name} for a in accts if a.institution_id == b.id]}

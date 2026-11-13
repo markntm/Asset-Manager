@@ -25,7 +25,12 @@ class IdMixin:
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
 
 
-class RootMixin(IdMixin):
+class OrderMixin:
+    """Manual display order within a parent (or within a user's top-level list)."""
+    sort_order: Mapped[int] = mapped_column(default=0, server_default="0")
+
+
+class RootMixin(IdMixin, OrderMixin):
     """Top-level rows: the only tables that point at a user."""
     name: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -63,7 +68,7 @@ class IncomeEntry(EntryMixin, Base):
 class ExpenseCategory(RootMixin, Base):
     __tablename__ = "cf_expense_categories"
 
-class ExpenseSubcategory(IdMixin, Base):
+class ExpenseSubcategory(IdMixin, OrderMixin, Base):
     __tablename__ = "cf_expense_subcategories"
     category_id: Mapped[str] = _fk("cf_expense_categories")
     name: Mapped[str] = mapped_column(String(200))
@@ -89,7 +94,7 @@ class BudgetTarget(Base):
 class CashInstitution(RootMixin, Base):
     __tablename__ = "nw_cash_institutions"
 
-class CashAccount(IdMixin, Base):
+class CashAccount(IdMixin, OrderMixin, Base):
     __tablename__ = "nw_cash_accounts"
     institution_id: Mapped[str] = _fk("nw_cash_institutions")
     name: Mapped[str] = mapped_column(String(200))
@@ -102,7 +107,7 @@ class CashEntry(EntryMixin, Base):
 class Brokerage(RootMixin, Base):
     __tablename__ = "nw_inv_brokerages"
 
-class Holding(IdMixin, Base):
+class Holding(IdMixin, OrderMixin, Base):
     __tablename__ = "nw_inv_holdings"
     brokerage_id: Mapped[str] = _fk("nw_inv_brokerages")
     ticker: Mapped[str] = mapped_column(String(32))
@@ -116,7 +121,7 @@ class InvEntry(EntryMixin, Base):
 class AssetCategory(RootMixin, Base):
     __tablename__ = "nw_asset_categories"
 
-class AssetItem(IdMixin, Base):
+class AssetItem(IdMixin, OrderMixin, Base):
     __tablename__ = "nw_asset_items"
     category_id: Mapped[str] = _fk("nw_asset_categories")
     name: Mapped[str] = mapped_column(String(200))
@@ -129,7 +134,7 @@ class AssetEntry(EntryMixin, Base):
 class LiabilityCategory(RootMixin, Base):
     __tablename__ = "nw_liability_categories"
 
-class LiabilityItem(IdMixin, Base):
+class LiabilityItem(IdMixin, OrderMixin, Base):
     __tablename__ = "nw_liability_items"
     category_id: Mapped[str] = _fk("nw_liability_categories")
     name: Mapped[str] = mapped_column(String(200))
